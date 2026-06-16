@@ -26,9 +26,10 @@
         <a href="#sobre">Sobre Nós</a>
         <a href="#trabalho">Nosso Trabalho</a>
         <a href="#quem-somos">Quem somos nós?</a>
+        <a href="#contato">Contato</a>
       </nav>
 
-      <a class="header-cta" href="mailto:contato@studiomada.com.br">Solicitar Orçamento</a>
+      <a class="header-cta" href="#contato">Solicitar Orçamento</a>
     </header>
 
     <main id="inicio">
@@ -210,6 +211,63 @@
           </article>
         </div>
       </section>
+
+      <section class="section contact" id="contato" aria-labelledby="contact-title">
+        <div class="contact-heading">
+          <p class="section-kicker">/ contato</p>
+          <h2 id="contact-title">ENTRE EM CONTATO</h2>
+        </div>
+
+        <form class="contact-form" data-contact-form>
+          <input type="text" name="company" class="form-honey" tabindex="-1" autocomplete="off" aria-hidden="true" />
+
+          <label class="inline-field">
+            <span>Meu nome é</span>
+            <input type="text" name="name" placeholder="Seu nome" autocomplete="name" required />
+          </label>
+
+          <label class="inline-field">
+            <span>Meu e-mail é</span>
+            <input type="email" name="email" placeholder="seu@email.com" autocomplete="email" required />
+          </label>
+
+          <fieldset class="interest-field">
+            <legend>Estou procurando por</legend>
+            <div class="interest-options">
+              <label>
+                <input type="checkbox" name="interests" value="Gestão de redes sociais" />
+                <span>Gestão de redes sociais</span>
+              </label>
+              <label>
+                <input type="checkbox" name="interests" value="Produção de conteúdo" />
+                <span>Produção de conteúdo</span>
+              </label>
+              <label>
+                <input type="checkbox" name="interests" value="Direção criativa" />
+                <span>Direção criativa</span>
+              </label>
+              <label>
+                <input type="checkbox" name="interests" value="Website design" />
+                <span>Website design</span>
+              </label>
+              <label>
+                <input type="checkbox" name="interests" value="Estratégia de marca" />
+                <span>Estratégia de marca</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <label class="message-field">
+            <span>Deixe uma mensagem</span>
+            <textarea name="message" placeholder="Conte um pouco sobre o que você precisa" rows="3" required></textarea>
+          </label>
+
+          <div class="form-actions">
+            <p class="form-status" data-form-status role="status" aria-live="polite"></p>
+            <button class="contact-submit" type="submit">Enviar mensagem</button>
+          </div>
+        </form>
+      </section>
     </main>
 
     <footer class="footer">
@@ -223,6 +281,7 @@
           <a href="#sobre">Sobre Nós</a>
           <a href="#trabalho">Nosso Trabalho</a>
           <a href="#quem-somos">Quem somos nós?</a>
+          <a href="#contato">Contato</a>
         </nav>
         <address>
           <a href="mailto:contato@studiomada.com.br">contato@studiomada.com.br</a>
