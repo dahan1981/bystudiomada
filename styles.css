@@ -376,16 +376,17 @@ h1 {
 .about-logo {
   display: grid;
   place-items: center;
-  border: 1px solid var(--line);
-  background: var(--cream);
+  border: 0;
+  background: #f4f3ee;
 }
 
 .about-logo img {
-  width: min(82%, 560px);
+  width: min(122%, 740px);
   height: auto;
   min-height: 0;
   object-fit: contain;
   filter: none;
+  transform: scale(1.04);
 }
 
 .about-copy {
