@@ -55,27 +55,79 @@
         <div class="intro-line alt">estratégia que transforma percepção</div>
       </section>
 
-      <section class="section services" id="servicos" aria-labelledby="services-title">
-        <div class="section-heading">
-          <p class="section-kicker">/ nossos serviços</p>
-          <h2 id="services-title">SOLUÇÕES CRIATIVAS PARA MARCAS QUE QUEREM SER LEMBRADAS</h2>
+      <section class="services" id="servicos" aria-labelledby="services-title">
+        <div class="services-bar" aria-hidden="true">
+          <span>Nossos serviços</span>
+          <span>Nossos serviços</span>
         </div>
 
-        <div class="service-grid">
-          <article class="service-card">
-            <span>01</span>
-            <h3>Identidade Visual</h3>
-            <p>Construção de sistemas visuais completos, com logo, paleta, tipografia, direção estética e aplicações.</p>
+        <div class="service-accordion">
+          <article class="service-row" data-service-item>
+            <div class="service-summary">
+              <span class="service-number">[01]</span>
+              <h2 id="services-title">Direção Criativa</h2>
+              <button
+                class="service-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="service-panel-1"
+                data-service-toggle
+              >
+                Saber mais
+              </button>
+            </div>
+            <div class="service-panel" id="service-panel-1" hidden>
+              <p>
+                Desenvolvemos conceitos, narrativas, moodboards e direcionamentos visuais para campanhas, editoriais,
+                lançamentos e presença digital. A ideia é transformar a essência da marca em uma estética reconhecível,
+                consistente e desejável.
+              </p>
+            </div>
           </article>
-          <article class="service-card">
-            <span>02</span>
-            <h3>Direção Criativa</h3>
-            <p>Conceitos, narrativas, moodboards e guias para campanhas, editoriais, lançamentos e presença digital.</p>
+
+          <article class="service-row" data-service-item>
+            <div class="service-summary">
+              <span class="service-number">[02]</span>
+              <h2 class="script-title">Website Design</h2>
+              <button
+                class="service-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="service-panel-2"
+                data-service-toggle
+              >
+                Saber mais
+              </button>
+            </div>
+            <div class="service-panel" id="service-panel-2" hidden>
+              <p>
+                Criamos páginas e experiências digitais com estrutura clara, estética alinhada à identidade da marca e
+                foco em conversão. O site deixa de ser apenas vitrine e passa a comunicar posicionamento, confiança e
+                intenção.
+              </p>
+            </div>
           </article>
-          <article class="service-card">
-            <span>03</span>
-            <h3>Conteúdo Estratégico</h3>
-            <p>Planejamento e produção de conteúdo para redes sociais com linguagem, estética e intenção comercial.</p>
+
+          <article class="service-row" data-service-item>
+            <div class="service-summary">
+              <span class="service-number">[03]</span>
+              <h2>Estratégia de Marca</h2>
+              <button
+                class="service-toggle"
+                type="button"
+                aria-expanded="false"
+                aria-controls="service-panel-3"
+                data-service-toggle
+              >
+                Saber mais
+              </button>
+            </div>
+            <div class="service-panel" id="service-panel-3" hidden>
+              <p>
+                Organizamos posicionamento, tom de voz, pilares de conteúdo e decisões visuais para que a marca saiba o
+                que comunicar, como aparecer e por que cada peça existe dentro da estratégia.
+              </p>
+            </div>
           </article>
         </div>
       </section>
