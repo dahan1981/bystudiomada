@@ -292,6 +292,21 @@ h1 {
   filter: grayscale(1);
 }
 
+.about-logo {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  background: var(--cream);
+}
+
+.about-logo img {
+  width: min(82%, 560px);
+  height: auto;
+  min-height: 0;
+  object-fit: contain;
+  filter: none;
+}
+
 .about-copy {
   max-width: 650px;
 }
