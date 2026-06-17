@@ -170,7 +170,7 @@ h3 {
 
 h1 {
   max-width: 680px;
-  font-size: clamp(3rem, 5vw, 5.45rem);
+  font-size: clamp(2.65rem, 4.25vw, 4.65rem);
   font-weight: 900;
   overflow-wrap: normal;
 }
@@ -511,8 +511,8 @@ h1 {
 }
 
 .founders .section-heading h2 {
-  max-width: 780px;
-  font-size: clamp(2.1rem, 4vw, 4.25rem);
+  max-width: 690px;
+  font-size: clamp(1.85rem, 3.2vw, 3.45rem);
   line-height: 0.98;
 }
 
@@ -910,7 +910,7 @@ h1 {
   }
 
   h1 {
-    font-size: clamp(3rem, 16vw, 4.65rem);
+    font-size: clamp(2.45rem, 12.8vw, 3.65rem);
   }
 
   .section {
@@ -946,7 +946,7 @@ h1 {
 
   .founders .section-heading h2 {
     max-width: 340px;
-    font-size: clamp(1.75rem, 8vw, 2.2rem);
+    font-size: clamp(1.45rem, 6.7vw, 1.85rem);
     line-height: 1.02;
   }
 
