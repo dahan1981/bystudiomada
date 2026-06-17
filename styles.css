@@ -186,8 +186,8 @@ h1 {
 }
 
 .intro-band {
-  padding-top: clamp(42px, 6vw, 76px);
-  padding-bottom: clamp(42px, 6vw, 76px);
+  padding-top: clamp(34px, 4.8vw, 60px);
+  padding-bottom: clamp(34px, 4.8vw, 60px);
   background: var(--blue);
   color: var(--cream);
   overflow: hidden;
@@ -197,9 +197,9 @@ h1 {
   max-width: var(--max);
   margin: 0 auto;
   font-family: var(--display);
-  font-size: clamp(2.1rem, 6vw, 6.8rem);
+  font-size: clamp(1.85rem, 4.8vw, 5.35rem);
   font-weight: 900;
-  line-height: 0.95;
+  line-height: 0.98;
   text-transform: uppercase;
 }
 
