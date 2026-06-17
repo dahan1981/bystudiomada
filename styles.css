@@ -237,12 +237,12 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 82px;
+  min-height: 64px;
   padding: 0 clamp(20px, 4vw, 48px);
-  border-top: 1px solid rgba(255, 251, 239, 0.55);
-  border-bottom: 1px solid rgba(255, 251, 239, 0.55);
+  border-top: 1px solid rgba(255, 251, 239, 0.36);
+  border-bottom: 1px solid rgba(255, 251, 239, 0.36);
   font-family: var(--display);
-  font-size: 0.86rem;
+  font-size: 0.78rem;
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -253,36 +253,37 @@ h1 {
 }
 
 .service-row {
-  border-bottom: 1px solid rgba(255, 251, 239, 0.55);
+  border-bottom: 1px solid rgba(255, 251, 239, 0.32);
 }
 
 .service-row.is-open .service-summary h2 {
-  transform: translateX(10px);
+  transform: translateX(6px);
 }
 
 .service-summary {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr) auto;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
   align-items: center;
-  gap: clamp(18px, 3vw, 38px);
-  min-height: clamp(190px, 19vw, 278px);
-  padding: clamp(26px, 4vw, 48px);
+  gap: clamp(14px, 2.4vw, 30px);
+  min-height: clamp(128px, 11vw, 172px);
+  padding: clamp(22px, 3vw, 34px) clamp(22px, 4vw, 48px);
 }
 
 .service-number {
   align-self: start;
   color: var(--cream);
   font-family: var(--display);
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 900;
+  opacity: 0.82;
 }
 
 .service-summary h2 {
-  max-width: 100%;
+  max-width: 980px;
   color: var(--cream);
-  font-size: clamp(2.8rem, 7.2vw, 7.4rem);
+  font-size: clamp(2.15rem, 4.7vw, 4.95rem);
   font-weight: 500;
-  line-height: 0.86;
+  line-height: 0.92;
   text-transform: uppercase;
   overflow-wrap: normal;
   word-break: normal;
@@ -291,23 +292,23 @@ h1 {
 
 .service-summary .script-title {
   font-family: var(--script);
-  font-size: clamp(3.4rem, 7.2vw, 7.2rem);
+  font-size: clamp(2.75rem, 5.4vw, 5.5rem);
   font-weight: 400;
   line-height: 1;
   text-transform: none;
 }
 
 .service-toggle {
-  min-width: 150px;
-  min-height: 42px;
-  padding: 10px 24px;
+  min-width: 128px;
+  min-height: 38px;
+  padding: 9px 20px;
   border: 1px solid var(--cream);
   border-radius: 999px;
   background: var(--cream);
   color: var(--blue);
   cursor: pointer;
   font-family: var(--body);
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -334,13 +335,13 @@ h1 {
 
 .service-panel {
   display: grid;
-  grid-template-columns: 54px minmax(0, 720px) 150px;
-  gap: clamp(18px, 3vw, 38px);
+  grid-template-columns: 46px minmax(0, 680px) 128px;
+  gap: clamp(14px, 2.4vw, 30px);
   max-height: 0;
   overflow: hidden;
   opacity: 0;
-  padding: 0 clamp(26px, 4vw, 48px) clamp(34px, 5vw, 56px);
-  transform: translateY(-14px);
+  padding: 0 clamp(22px, 4vw, 48px) clamp(24px, 3vw, 36px);
+  transform: translateY(-10px);
   transition:
     max-height 720ms cubic-bezier(0.22, 1, 0.36, 1),
     opacity 420ms ease,
@@ -360,9 +361,10 @@ h1 {
 .service-panel p {
   grid-column: 2;
   margin: 0;
-  color: rgba(255, 251, 239, 0.82);
-  font-size: clamp(1rem, 1.3vw, 1.22rem);
-  line-height: 1.75;
+  max-width: 660px;
+  color: rgba(255, 251, 239, 0.76);
+  font-size: clamp(0.95rem, 1.05vw, 1.08rem);
+  line-height: 1.62;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -668,26 +670,6 @@ h1 {
     color 160ms ease;
 }
 
-.interest-options label:nth-child(3) {
-  grid-column: 1;
-  grid-row: 2;
-}
-
-.interest-options label:nth-child(5) {
-  grid-column: 2;
-  grid-row: 2;
-}
-
-.interest-options label:nth-child(4) {
-  grid-column: 1;
-  grid-row: 3;
-}
-
-.interest-options label:nth-child(6) {
-  grid-column: 2;
-  grid-row: 3;
-}
-
 .interest-options input:checked + span,
 .interest-options label.is-selected span {
   background: var(--blue);
@@ -873,8 +855,8 @@ h1 {
 
   .service-summary h2,
   .service-summary .script-title {
-    font-size: clamp(2.55rem, 12vw, 4rem);
-    line-height: 0.94;
+    font-size: clamp(2rem, 9vw, 3.2rem);
+    line-height: 0.98;
   }
 
   .service-toggle {
