@@ -23,12 +23,41 @@ serviceItems.forEach((item) => {
 
   if (!button || !panel) return;
 
+  panel.addEventListener("transitionend", (event) => {
+    if (event.propertyName !== "max-height") return;
+
+    const isOpen = button.getAttribute("aria-expanded") === "true";
+
+    if (isOpen) {
+      panel.style.maxHeight = "none";
+    } else {
+      panel.hidden = true;
+    }
+  });
+
   button.addEventListener("click", () => {
     const isOpen = button.getAttribute("aria-expanded") === "true";
 
-    button.setAttribute("aria-expanded", String(!isOpen));
-    panel.hidden = isOpen;
-    item.classList.toggle("is-open", !isOpen);
+    if (isOpen) {
+      panel.style.maxHeight = `${panel.scrollHeight}px`;
+      button.setAttribute("aria-expanded", "false");
+      item.classList.remove("is-open");
+
+      requestAnimationFrame(() => {
+        panel.style.maxHeight = "0px";
+      });
+
+      return;
+    }
+
+    panel.hidden = false;
+    panel.style.maxHeight = "0px";
+    button.setAttribute("aria-expanded", "true");
+    item.classList.add("is-open");
+
+    requestAnimationFrame(() => {
+      panel.style.maxHeight = `${panel.scrollHeight}px`;
+    });
   });
 });
 
