@@ -58,14 +58,14 @@ main section {
 }
 
 .brand {
-  width: 72px;
+  width: 54px;
   overflow: hidden;
 }
 
 .brand img {
-  width: 72px;
+  width: 54px;
   height: 54px;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   filter: contrast(1.08);
 }
@@ -914,7 +914,7 @@ h1 {
 @media (max-width: 640px) {
   .brand,
   .brand img {
-    width: 108px;
+    width: 54px;
   }
 
   .hero-copy {
