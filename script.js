@@ -70,8 +70,17 @@ serviceItems.forEach((item) => {
 
 const contactForm = document.querySelector("[data-contact-form]");
 const formStatus = document.querySelector("[data-form-status]");
+const formStartedAt = document.querySelector("[data-form-started-at]");
+
+function resetFormStartedAt() {
+  if (formStartedAt) {
+    formStartedAt.value = String(Date.now());
+  }
+}
 
 if (contactForm && formStatus) {
+  resetFormStartedAt();
+
   contactForm.querySelectorAll('input[name="interests"]').forEach((input) => {
     input.addEventListener("change", () => {
       input.closest("label").classList.toggle("is-selected", input.checked);
@@ -99,6 +108,7 @@ if (contactForm && formStatus) {
       phone: String(formData.get("phone") || "").trim(),
       message: String(formData.get("message") || "").trim(),
       company: String(formData.get("company") || "").trim(),
+      formStartedAt: String(formData.get("formStartedAt") || ""),
       interests,
     };
 
@@ -118,6 +128,10 @@ if (contactForm && formStatus) {
       }
 
       contactForm.reset();
+      contactForm.querySelectorAll('input[name="interests"]').forEach((input) => {
+        input.closest("label").classList.remove("is-selected");
+      });
+      resetFormStartedAt();
       formStatus.textContent = "Mensagem enviada. Em breve entraremos em contato.";
     } catch (error) {
       formStatus.textContent = error.message;
