@@ -1,4 +1,5 @@
 const CONTACT_TO_EMAIL = process.env.CONTACT_TO_EMAIL || "contato@bystudiomada.com.br";
+const CONTACT_COPY_EMAIL = "equipeninastoll@gmail.com";
 const CONTACT_FROM_EMAIL = process.env.CONTACT_FROM_EMAIL || "Studio Madá <onboarding@resend.dev>";
 const SITE_URL = (process.env.SITE_URL || "https://bystudiomada.vercel.app").replace(/\/$/, "");
 const LOGO_URL = `${SITE_URL}/Logos/completo%20preto%20e%20branco.jpeg`;
@@ -72,7 +73,7 @@ module.exports = async function handler(request, response) {
   try {
     await sendEmail({
       from: CONTACT_FROM_EMAIL,
-      to: [CONTACT_TO_EMAIL],
+      to: [CONTACT_TO_EMAIL, CONTACT_COPY_EMAIL],
       reply_to: email,
       subject: `Novo contato Studio Madá - ${name}`,
       html: `
