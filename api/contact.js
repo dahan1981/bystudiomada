@@ -95,7 +95,7 @@ function isRateLimited(request) {
 
 function hasSuspiciousContent(value) {
   const text = String(value || "");
-  const linkMatches = text.match(/https?:\/\/|www\.|\.com\b|\.ru\b|\.cn\b|\.top\b/gi) || [];
+  const linkMatches = text.match(/https?:\/\/|www\.|\.ru\b|\.cn\b|\.top\b/gi) || [];
   const repeatedChars = /(.)\1{8,}/.test(text);
   const htmlTags = /<[^>]+>/.test(text);
 
