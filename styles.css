@@ -889,6 +889,23 @@ h1 {
     grid-template-columns: 1fr;
   }
 
+  .founder-card > div {
+    display: contents;
+  }
+
+  .founder-card h3 {
+    order: 1;
+    margin-bottom: 0;
+  }
+
+  .founder-card img {
+    order: 2;
+  }
+
+  .founder-card p {
+    order: 3;
+  }
+
   .founders .section-heading {
     margin-bottom: 28px;
   }
