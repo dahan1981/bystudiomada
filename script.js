@@ -89,6 +89,7 @@ if (contactForm && formStatus) {
     const payload = {
       name: String(formData.get("name") || "").trim(),
       email: String(formData.get("email") || "").trim(),
+      phone: String(formData.get("phone") || "").trim(),
       message: String(formData.get("message") || "").trim(),
       company: String(formData.get("company") || "").trim(),
       interests,
