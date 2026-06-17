@@ -805,6 +805,38 @@ h1 {
   text-transform: uppercase;
 }
 
+.footer-social-links {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.footer-social-link {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.9;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.footer-social-link:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.footer-social-link img {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  object-fit: contain;
+  filter: invert(1);
+}
+
 .footer-bottom {
   border-top: 1px solid rgba(255, 251, 239, 0.18);
   padding: 18px 20px;
