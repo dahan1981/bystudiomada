@@ -142,10 +142,10 @@ main section {
 .hero-copy {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   max-width: 690px;
   min-width: 0;
-  padding: clamp(44px, 6vw, 88px) clamp(24px, 5vw, 72px);
+  padding: clamp(84px, 12vh, 132px) clamp(24px, 5vw, 72px) clamp(44px, 6vw, 88px);
 }
 
 .section-kicker {
