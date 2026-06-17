@@ -412,7 +412,6 @@ h1 {
   height: 100%;
   min-height: 620px;
   object-fit: cover;
-  filter: grayscale(1);
 }
 
 .about-logo {
