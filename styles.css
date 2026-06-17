@@ -562,7 +562,7 @@ h1 {
 
 .contact-form {
   display: grid;
-  gap: 24px;
+  gap: 26px;
 }
 
 .form-honey {
@@ -618,8 +618,7 @@ h1 {
 
 .interest-field {
   display: grid;
-  grid-template-columns: 178px minmax(0, 1fr);
-  column-gap: 24px;
+  gap: 14px;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -627,17 +626,19 @@ h1 {
 }
 
 .interest-options {
-  grid-column: 2;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+  align-items: start;
+  margin-left: 0;
 }
 
 .interest-field legend {
-  padding-top: 12px;
+  padding-top: 0;
 }
 
 .interest-options label {
+  min-width: 0;
   cursor: pointer;
 }
 
@@ -649,10 +650,11 @@ h1 {
 
 .interest-options span {
   display: inline-flex;
+  width: 100%;
   min-height: 42px;
   align-items: center;
   justify-content: center;
-  padding: 10px 16px;
+  padding: 10px 15px;
   border: 1px solid var(--blue);
   border-radius: 999px;
   color: var(--blue);
@@ -664,6 +666,26 @@ h1 {
   transition:
     background 160ms ease,
     color 160ms ease;
+}
+
+.interest-options label:nth-child(3) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.interest-options label:nth-child(5) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.interest-options label:nth-child(4) {
+  grid-column: 1;
+  grid-row: 3;
+}
+
+.interest-options label:nth-child(6) {
+  grid-column: 2;
+  grid-row: 3;
 }
 
 .interest-options input:checked + span,
@@ -679,31 +701,28 @@ h1 {
 
 .message-field {
   display: grid;
-  grid-template-columns: 178px minmax(0, 1fr);
-  align-items: start;
-  column-gap: 24px;
+  gap: 16px;
   margin-top: 0;
 }
 
 .message-field textarea {
-  grid-column: 2;
-  min-height: 72px;
+  grid-column: 1;
+  min-height: 62px;
   resize: vertical;
 }
 
 .message-field span {
-  padding-top: 12px;
+  padding-top: 0;
 }
 
 .form-actions {
   display: grid;
-  grid-template-columns: 178px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 24px;
   align-items: center;
 }
 
 .form-status {
-  grid-column: 2;
   min-height: 24px;
   margin: 0;
   color: var(--blue);
@@ -716,7 +735,6 @@ h1 {
 }
 
 .contact-submit {
-  grid-column: 2;
   justify-self: end;
   min-height: 46px;
   padding: 12px 28px;
@@ -892,6 +910,16 @@ h1 {
   .form-status,
   .contact-submit {
     grid-column: 1;
+  }
+
+  .interest-options {
+    grid-template-columns: 1fr;
+    margin-left: 0;
+  }
+
+  .interest-options label:nth-child(n) {
+    grid-column: auto;
+    grid-row: auto;
   }
 
   .contact-submit {
