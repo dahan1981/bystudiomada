@@ -48,7 +48,7 @@ main section {
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: 88px 1fr auto;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 28px;
   padding: 18px clamp(20px, 4vw, 56px);
@@ -57,7 +57,14 @@ main section {
   backdrop-filter: blur(14px);
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
 .brand {
+  flex: 0 0 auto;
   width: 54px;
   overflow: hidden;
 }
@@ -68,6 +75,36 @@ main section {
   object-fit: contain;
   object-position: center;
   filter: contrast(1.08);
+}
+
+.social-links {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.social-link {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  color: var(--blue);
+  opacity: 0.9;
+  transition:
+    opacity 180ms ease,
+    transform 180ms ease;
+}
+
+.social-link:hover {
+  opacity: 1;
+  transform: translateY(-1px);
+}
+
+.social-link img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
 }
 
 .site-nav {
@@ -782,7 +819,7 @@ h1 {
   }
 
   .site-header {
-    grid-template-columns: 120px auto;
+    grid-template-columns: 1fr auto;
   }
 
   .menu-toggle {
@@ -914,6 +951,24 @@ h1 {
   .brand,
   .brand img {
     width: 54px;
+  }
+
+  .header-left {
+    gap: 12px;
+  }
+
+  .social-links {
+    gap: 7px;
+  }
+
+  .social-link {
+    width: 26px;
+    height: 26px;
+  }
+
+  .social-link img {
+    width: 16px;
+    height: 16px;
   }
 
   .hero-copy {

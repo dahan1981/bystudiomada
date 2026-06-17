@@ -1,5 +1,12 @@
 const toggle = document.querySelector("[data-menu-toggle]");
 const nav = document.querySelector("[data-nav]");
+const pendingSocialLinks = document.querySelectorAll("[data-social-pending]");
+
+pendingSocialLinks.forEach((link) => {
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+  });
+});
 
 if (toggle && nav) {
   toggle.addEventListener("click", () => {
