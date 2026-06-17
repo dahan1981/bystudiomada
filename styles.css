@@ -564,7 +564,7 @@ h1 {
 
 .contact-form {
   display: grid;
-  gap: 26px;
+  gap: 28px;
 }
 
 .form-honey {
@@ -583,10 +583,10 @@ h1 {
 .message-field span,
 .interest-field legend {
   color: var(--blue);
-  font-family: var(--display);
-  font-size: clamp(0.88rem, 1vw, 1rem);
-  font-weight: 900;
-  line-height: 1.1;
+  font-family: var(--body);
+  font-size: clamp(0.86rem, 0.95vw, 0.96rem);
+  font-weight: 800;
+  line-height: 1.25;
   text-transform: uppercase;
 }
 
@@ -599,11 +599,11 @@ h1 {
   border-radius: 0;
   background: transparent;
   color: var(--text);
-  font: 700 0.92rem/1.4 var(--body);
+  font: 700 0.95rem/1.45 var(--body);
   letter-spacing: 0;
   outline: 0;
   padding: 0 0 10px;
-  text-transform: none;
+  text-transform: uppercase;
 }
 
 .inline-field input::placeholder,
@@ -620,7 +620,7 @@ h1 {
 
 .interest-field {
   display: grid;
-  gap: 14px;
+  gap: 20px;
   min-width: 0;
   margin: 0;
   padding: 0;
@@ -630,13 +630,15 @@ h1 {
 .interest-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  gap: 14px 12px;
   align-items: start;
+  margin-top: 12px;
   margin-left: 0;
 }
 
 .interest-field legend {
   padding-top: 0;
+  margin-bottom: 2px;
 }
 
 .interest-options label {
@@ -660,9 +662,9 @@ h1 {
   border: 1px solid var(--blue);
   border-radius: 999px;
   color: var(--blue);
-  font-family: var(--display);
+  font-family: var(--body);
   font-size: 0.78rem;
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: 0;
   text-transform: uppercase;
   transition:
