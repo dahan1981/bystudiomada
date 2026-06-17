@@ -1,4 +1,4 @@
-const CONTACT_TO_EMAIL = process.env.CONTACT_TO_EMAIL || "contato@studiomada.com.br";
+const CONTACT_TO_EMAIL = process.env.CONTACT_TO_EMAIL || "contato@bystudiomada.com.br";
 const CONTACT_FROM_EMAIL = process.env.CONTACT_FROM_EMAIL || "Studio Madá <onboarding@resend.dev>";
 
 function escapeHtml(value) {
