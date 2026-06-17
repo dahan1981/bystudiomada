@@ -121,7 +121,7 @@ module.exports = async function handler(request, response) {
                       <p style="margin: 0 0 18px; font-size: 17px; line-height: 1.7;">Recebemos as informações que você enviou pelo site da Studio Madá. Já vamos olhar tudo com atenção e em breve entraremos em contato com você pelo WhatsApp ou pelo e-mail informado.</p>
                       <p style="margin: 0 0 28px; font-size: 17px; line-height: 1.7;">Enquanto isso, pode ficar tranquila(o): seu pedido chegou por aqui.</p>
                       <div style="padding: 18px 20px; background: #283e5c; color: #fffbef;">
-                        <p style="margin: 0; font-size: 14px; line-height: 1.6;"><strong>Studio Madá</strong><br />Branding, conteúdo e presença digital</p>
+                        <p style="margin: 0; font-size: 14px; line-height: 1.6;"><strong>Studio Madá</strong><br />STUDIO CRIATIVO</p>
                       </div>
                     </td>
                   </tr>
