@@ -20,6 +20,11 @@ test("production schema, RLS and private bucket are installed", { skip: !process
     assert.equal(Number(bucket.rows[0].file_size_limit), 10 * 1024 * 1024);
     const imported = await pool.query("select count(*)::int as count from public.opportunities where legacy_id is not null");
     assert.equal(imported.rows[0].count, 2);
+    const paymentContractColumn = await pool.query(`
+      select is_nullable from information_schema.columns
+      where table_schema = 'public' and table_name = 'customer_payments' and column_name = 'contract_id'
+    `);
+    assert.equal(paymentContractColumn.rows[0].is_nullable, "YES");
   } finally {
     await pool.end();
   }

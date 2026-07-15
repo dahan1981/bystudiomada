@@ -12,4 +12,5 @@ test("all portal tables enable RLS and Storage remains private", () => {
   assert(sql.includes("'portal-documents'"));
   assert(sql.includes("false,\n  10485760"));
   assert(sql.includes("with check"));
+  assert(sql.includes("alter column contract_id drop not null"), "manual payments must allow an optional CRM contract");
 });

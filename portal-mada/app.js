@@ -367,6 +367,9 @@ const currency = new Intl.NumberFormat("pt-BR", {
 });
 
 const dateFormat = new Intl.DateTimeFormat("pt-BR", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
   timeZone: "America/Sao_Paulo",
 });
 
@@ -804,7 +807,10 @@ function netAmountAfterDiscount(amountCents, discountPercent) {
 
 function dateLabel(value) {
   if (!value) return "-";
-  return dateFormat.format(new Date(value));
+  const date = parseDateOnly(String(value).slice(0, 10)) || new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  const parts = Object.fromEntries(dateFormat.formatToParts(date).map((part) => [part.type, part.value]));
+  return `${parts.day} ${String(parts.month || "").replace(".", "")} ${parts.year}`.trim();
 }
 
 function esc(value) {
@@ -1048,6 +1054,7 @@ function visibleContracts() {
 }
 
 function visiblePayments() {
+  if (currentUser.role === "admin_manager") return state.payments;
   const contractIds = new Set(visibleContracts().map((contract) => contract.id));
   return state.payments.filter((payment) => contractIds.has(payment.contractId));
 }
@@ -1709,8 +1716,8 @@ function renderOpportunities() {
         <option value="">Todas as SDRs</option>
         ${sdrUsers().map((user) => `<option value="${esc(user.id)}">${esc(user.name)}</option>`).join("")}
       </select>
-      <input type="date" data-date-from-filter aria-label="Data inicial" />
-      <input type="date" data-date-to-filter aria-label="Data final" />
+      ${renderDateControl({ placeholder: "Data inicial", ariaLabel: "Data inicial", compact: true, inputAttributes: "data-date-from-filter" })}
+      ${renderDateControl({ placeholder: "Data final", ariaLabel: "Data final", compact: true, inputAttributes: "data-date-to-filter" })}
       <input class="search" data-money-input data-amount-min-filter inputmode="decimal" placeholder="Valor mínimo" />
       <input class="search" data-money-input data-amount-max-filter inputmode="decimal" placeholder="Valor máximo" />
     </div>
@@ -1843,8 +1850,7 @@ function dateOnlyValue(date) {
 }
 
 function progressDateLabel(value) {
-  const date = parseDateOnly(value);
-  return date ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(date).replace(" de ", " ") : "Definir data";
+  return value ? dateLabel(value) : "Definir data";
 }
 
 function progressCalendarBody(selectedValue, monthValue) {
@@ -1877,6 +1883,29 @@ function progressCalendarBody(selectedValue, monthValue) {
     <div class="progress-calendar-foot">
       <button type="button" data-progress-date-clear>Limpar</button>
       <button type="button" data-progress-date-value="${todayValue}">Hoje</button>
+    </div>
+  `;
+}
+
+function renderDateControl({ name = "", value = "", placeholder = "Definir data", ariaLabel = "", inputAttributes = "", compact = false } = {}) {
+  const normalizedValue = String(value || "").slice(0, 10);
+  const monthValue = normalizedValue || dateOnlyValue(new Date());
+  return `
+    <div class="portal-date-control ${compact ? "is-compact" : ""}" data-date-control>
+      <input type="hidden" ${name ? `name="${esc(name)}"` : ""} value="${esc(normalizedValue)}" data-date-input ${inputAttributes} />
+      <details class="progress-picker date-picker portal-date-picker" data-date-picker ${ariaLabel ? `aria-label="${esc(ariaLabel)}"` : ""}>
+        <summary>${renderIcon("calendar-days")}<span class="${normalizedValue ? "" : "is-placeholder"}" data-date-label>${esc(normalizedValue ? dateLabel(normalizedValue) : placeholder)}</span>${renderIcon("chevron-down")}</summary>
+        <div class="progress-popover progress-calendar" data-date-calendar data-month="${monthValue}">${progressCalendarBody(normalizedValue, monthValue)}</div>
+      </details>
+    </div>
+  `;
+}
+
+function renderDateField(label, name, value = "", options = {}) {
+  return `
+    <div class="field portal-date-field ${options.full ? "full" : ""}">
+      <span>${esc(label)}${options.required ? " *" : ""}</span>
+      ${renderDateControl({ name, value, placeholder: options.placeholder || "Definir data", ariaLabel: label, inputAttributes: options.required ? "required" : "" })}
     </div>
   `;
 }
@@ -2137,22 +2166,23 @@ function renderPayments() {
   const rows = visiblePayments();
   const confirmed = rows.filter((item) => item.status === "confirmed").reduce((sum, item) => sum + item.amountCents, 0);
   const pending = rows.filter((item) => item.status !== "confirmed").reduce((sum, item) => sum + item.amountCents, 0);
+  const externalCount = rows.filter((item) => !item.contractId).length;
   return `
     ${pageHead(
       "Pagamentos",
       currentUser.role === "admin_manager"
-        ? "Registros informativos dos recebimentos externos vinculados a cada contrato"
+        ? "Controle manual dos valores recebidos fora da plataforma, com vinculo opcional ao CRM"
         : "Registros informativos dos pagamentos externos dos seus contratos",
-      currentUser.role === "admin_manager" && contracts.length ? `<button class="button" type="button" data-new-payment>${renderIcon("plus")} Novo registro</button>` : ""
+      currentUser.role === "admin_manager" ? `<button class="button" type="button" data-new-payment>${renderIcon("plus")} Novo pagamento</button>` : ""
     )}
     <section class="card notice-card">
       <strong>Registro apenas informativo</strong>
-      <p>Nenhuma cobranca, Pix, boleto, cartao ou transferencia acontece pela plataforma. Use esta area somente para registrar valores pagos fora do CRM, anexar informacoes e alimentar contratos, comissoes e relatorios.</p>
+      <p>Nenhuma cobranca acontece pela plataforma. Registre aqui o que foi pago por Pix, transferencia, boleto, cartao externo ou outro meio. O vinculo com um contrato pode ser feito agora ou depois.</p>
     </section>
     <div class="grid cards-3">
       ${metricCard("Recebido confirmado", brl(confirmed), "$")}
       ${metricCard("A confirmar", brl(pending), "$")}
-      ${metricCard("Contratos", contracts.length, "▣")}
+      ${metricCard("Sem vinculo com CRM", externalCount, "link-2-off")}
     </div>
     ${contracts.length ? `
       <div class="table-wrap" style="margin-top:18px">
@@ -2183,18 +2213,20 @@ function renderPayments() {
           </tbody>
         </table>
       </div>
-    ` : `<section class="card" style="margin-top:18px">${empty("Nenhum contrato disponivel para pagamento", "$")}</section>`}
+    ` : currentUser.role === "admin_manager" ? `<section class="card" style="margin-top:18px">${empty("Nenhum contrato disponivel", "$", "Ainda assim, voce pode registrar um pagamento manual e vincula-lo ao CRM depois.", `<button class="button" type="button" data-new-payment>${renderIcon("plus")} Registrar pagamento manual</button>`)}</section>` : ""}
     ${rows.length ? `
       <h3 style="margin-top:28px">Historico de pagamentos</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Contrato</th><th>Tipo</th><th>Valor</th><th>Metodo</th><th>Pagador / referencia</th><th>Comprovante</th><th>Status</th><th>Data</th><th>Observacao</th><th></th></tr></thead>
+          <thead><tr><th>Vinculo</th><th>Cliente / origem</th><th>Tipo</th><th>Valor</th><th>Metodo</th><th>Pagador / referencia</th><th>Comprovante</th><th>Status</th><th>Data</th><th>Observacao</th><th></th></tr></thead>
           <tbody>
             ${rows.map((item) => {
               const contract = byId(state.contracts, item.contractId);
+              const opportunity = contract && byId(state.opportunities, contract.opportunityId);
               return `
                 <tr>
-                  <td>${esc(contract?.contractNumber || "-")}</td>
+                  <td>${contract ? `<span class="link-status linked">${renderIcon("link-2")} ${esc(contract.contractNumber)}</span>` : `<span class="link-status external">${renderIcon("link-2-off")} Sem vinculo</span>`}</td>
+                  <td><strong>${esc(item.externalClientName || opportunity?.clientName || "Registro externo")}</strong></td>
                   <td>${esc(paymentTypeLabel(item.type))}</td>
                   <td>${brl(item.amountCents)}</td>
                   <td>${esc(item.method || "-")}</td>
@@ -2213,7 +2245,7 @@ function renderPayments() {
           </tbody>
         </table>
       </div>
-    ` : ""}
+    ` : `<section class="card" style="margin-top:18px">${empty("Nenhum pagamento registrado", "$", currentUser.role === "admin_manager" ? "Adicione o primeiro recebimento manual para iniciar o controle financeiro." : "Os pagamentos dos seus contratos aparecerao aqui.")}</section>`}
   `;
 }
 
@@ -2224,6 +2256,7 @@ function paymentTypeLabel(type) {
     installment: "Parcela",
     remaining: "Saldo restante",
     adjustment: "Ajuste",
+    external: "Pagamento externo",
   };
   return labels[type] || type || "-";
 }
@@ -2770,6 +2803,8 @@ function renderReports() {
     <section class="card" style="margin-top:18px">
       <div class="actions" style="margin-top:0">
         <button class="button" data-export-csv="opportunities">Exportar oportunidades CSV</button>
+        <button class="button secondary" data-export-csv="payments">Exportar pagamentos CSV</button>
+        <button class="button secondary" data-export-csv="commissions">Exportar comissoes CSV</button>
         <button class="button secondary" data-export-csv="audit">Exportar auditoria CSV</button>
       </div>
     </section>
@@ -3017,7 +3052,7 @@ function renderDrawer() {
   if (drawer.type === "newProject") return renderNewProjectDrawer();
   if (drawer.type === "opportunity") return renderOpportunityDrawer(drawer.id);
   if (drawer.type === "contract") return renderContractDrawer(drawer.id);
-  if (drawer.type === "paymentRecord") return renderPaymentRecordDrawer(drawer.contractId, drawer.paymentId, drawer.allowContractSwitch);
+  if (drawer.type === "paymentRecord") return renderPaymentRecordDrawer(drawer.contractId, drawer.paymentId);
   if (drawer.type === "payoutPayment") return renderPayoutPaymentDrawer(drawer.id);
   if (drawer.type === "project") return renderProjectDrawer(drawer.id);
   if (drawer.type === "sdrCommissionDashboard") return renderSdrCommissionDrawer(drawer.id);
@@ -3107,8 +3142,8 @@ function renderNewProjectDrawer() {
               <label class="field full"><span>Nome do projeto *</span><input name="projectName" required placeholder="Ex. Reposicionamento de marca 2026" /></label>
               <label class="field"><span>SDR responsavel</span><select name="sdrId">${opportunityResponsibleOptions(MANAGEMENT_OWNER_ID)}</select></label>
               <label class="field"><span>Status inicial</span><select name="status">${projectStatusOptions.map(([value, label]) => `<option value="${value}" ${value === "planning" ? "selected" : ""}>${label}</option>`).join("")}</select></label>
-              <label class="field"><span>Data de inicio</span><input name="startsAt" type="date" value="${nowIso().slice(0, 10)}" /></label>
-              <label class="field"><span>Prazo previsto</span><input name="targetEndAt" type="date" value="${addDays(60)}" /></label>
+              ${renderDateField("Data de inicio", "startsAt", nowIso().slice(0, 10))}
+              ${renderDateField("Prazo previsto", "targetEndAt", addDays(60))}
               <label class="field full"><span>Modelo de etapas</span><select name="template"><option value="complete">Fluxo completo Mada</option><option value="simple">Fluxo simplificado</option></select></label>
             </div>
           </section>
@@ -3117,7 +3152,7 @@ function renderNewProjectDrawer() {
               <legend>Servicos do projeto *</legend>
               <div class="service-picker-toolbar"><strong data-service-count>0 selecionado(s)</strong><button class="button ghost compact-button" type="button" data-clear-services>Limpar selecao</button></div>
               <div class="check-grid service-check-grid">
-                ${state.services.map((item) => `<label class="check-card service-check-card"><input type="checkbox" name="serviceIds" value="${item.id}" data-service-option /><span>${esc(item.name)}</span>${renderIcon("check", "service-selected-icon")}</label>`).join("")}
+                ${state.services.map((item) => `<div class="check-card service-check-card" role="checkbox" aria-checked="false" tabindex="0" data-service-card><input type="checkbox" name="serviceIds" value="${item.id}" data-service-option tabindex="-1" aria-hidden="true" /><span>${esc(item.name)}</span>${renderIcon("check", "service-selected-icon")}</div>`).join("")}
               </div>
             </fieldset>
           </section>
@@ -3199,11 +3234,11 @@ function opportunityFormFields(opportunity = {}) {
           </div>
           <div class="check-grid service-check-grid">
             ${state.services.map((item) => `
-              <label class="check-card service-check-card ${selectedServiceIds.includes(item.id) ? "is-selected" : ""}">
-                <input type="checkbox" name="serviceIds" value="${item.id}" data-service-option ${selectedServiceIds.includes(item.id) ? "checked" : ""} />
+              <div class="check-card service-check-card ${selectedServiceIds.includes(item.id) ? "is-selected" : ""}" role="checkbox" aria-checked="${selectedServiceIds.includes(item.id)}" tabindex="0" data-service-card>
+                <input type="checkbox" name="serviceIds" value="${item.id}" data-service-option tabindex="-1" aria-hidden="true" ${selectedServiceIds.includes(item.id) ? "checked" : ""} />
                 <span>${esc(item.name)}</span>
                 ${renderIcon("check", "service-selected-icon")}
-              </label>
+              </div>
             `).join("")}
           </div>
           <small>Marque uma ou mais opcoes quando a oportunidade for combo.</small>
@@ -3216,7 +3251,7 @@ function opportunityFormFields(opportunity = {}) {
     <section class="card">
       <p class="section-title">Qualificacao</p>
       <div class="form-grid">
-        <label class="field"><span>Prazo</span><input name="expectedDeadline" type="date" value="${esc(opportunity.expectedDeadline)}" /></label>
+        ${renderDateField("Prazo", "expectedDeadline", opportunity.expectedDeadline)}
         <label class="field"><span>Faixa de investimento</span><input name="investmentRange" placeholder="Ex. R$ 5 mil a R$ 8 mil" value="${esc(opportunity.investmentRange)}" /></label>
         <div class="field">
           <span>Contratação anterior</span>
@@ -3238,7 +3273,7 @@ function opportunityFormFields(opportunity = {}) {
         <label class="field"><span>Valor proposto</span><input name="suggestedAmount" data-money-input inputmode="decimal" placeholder="0,00" value="${opportunity.suggestedAmountCents ? moneyInputValue(opportunity.suggestedAmountCents) : ""}" /></label>
         <label class="field"><span>Orçamento / investimento do cliente</span><input name="clientBudget" data-money-input inputmode="decimal" placeholder="0,00" value="${opportunity.clientBudgetCents ? moneyInputValue(opportunity.clientBudgetCents) : ""}" /></label>
         <label class="field"><span>Desconto (%)</span><input name="suggestedDiscount" data-percent-input inputmode="decimal" placeholder="0" value="${percentInputValue(discountPercentForOpportunity(opportunity))}" /></label>
-        <label class="field"><span>Prazo sugerido</span><input name="suggestedDeadline" type="date" value="${esc(opportunity.suggestedDeadline)}" /></label>
+        ${renderDateField("Prazo sugerido", "suggestedDeadline", opportunity.suggestedDeadline)}
         <label class="field full"><span>Objecoes</span><textarea name="objections">${esc(opportunity.objections)}</textarea></label>
         <label class="field full">
           <span>Condicoes solicitadas</span>
@@ -3264,10 +3299,10 @@ function renderOpportunityCrmReadOnly(opp) {
         <div class="detail-row"><span>Sinal de operação</span><div>${esc(opp.operationSignal || "-")}</div></div>
         <div class="detail-row"><span>Momento atual</span><div>${esc(opp.currentMoment || "-")}</div></div>
         <div class="detail-row"><span>Problema / necessidade</span><div>${esc([opp.observedProblem, opp.reportedNeed].filter(Boolean).join(" / ") || "-")}</div></div>
-        <div class="detail-row"><span>Prazo / investimento</span><div>${esc([opp.expectedDeadline, opp.investmentRange].filter(Boolean).join(" / ") || "-")}</div></div>
+        <div class="detail-row"><span>Prazo / investimento</span><div>${esc([opp.expectedDeadline ? dateLabel(opp.expectedDeadline) : "", opp.investmentRange].filter(Boolean).join(" / ") || "-")}</div></div>
         <div class="detail-row"><span>Contratação anterior</span><div>${esc(opp.previousHiring || "-")}</div></div>
         <div class="detail-row"><span>Urgência</span><div>${esc(opp.urgency || "-")}</div></div>
-        <div class="detail-row"><span>Próxima ação</span><div>${esc([opp.nextAction, opp.nextActionDate].filter(Boolean).join(" - ") || "-")}</div></div>
+        <div class="detail-row"><span>Próxima ação</span><div>${esc([opp.nextAction, opp.nextActionDate ? dateLabel(opp.nextActionDate) : ""].filter(Boolean).join(" - ") || "-")}</div></div>
       </div>
     </section>
   `;
@@ -3522,7 +3557,7 @@ function renderOpportunityFollowForm(opp) {
       <label class="field"><span>${config.label}</span><textarea name="note" required placeholder="${config.placeholder}"></textarea></label>
       <div class="form-grid">
         <label class="field"><span>Próxima ação</span><input name="nextAction" value="${esc(opp.nextAction || "")}" /></label>
-        <label class="field"><span>Data da próxima ação</span><input name="nextActionDate" type="date" value="${esc(opp.nextActionDate || "")}" /></label>
+        ${renderDateField("Data da próxima ação", "nextActionDate", opp.nextActionDate || "")}
       </div>
       <div class="actions"><button class="button ${action === "client_declined" ? "danger" : ""}" type="submit">${config.button}</button></div>
     </form>
@@ -3618,10 +3653,7 @@ function renderApprovalFollowActionMenu(opp, action) {
             ${config.followOptions.map((option) => `<option value="${esc(option)}">${esc(option)}</option>`).join("")}
           </select>
         </label>
-        <label class="field">
-          <span>Data da proxima acao</span>
-          <input name="nextActionDate" type="date" value="${addDays(action === "needs_information" ? 2 : 1)}" />
-        </label>
+        ${renderDateField("Data da proxima acao", "nextActionDate", addDays(action === "needs_information" ? 2 : 1))}
         <label class="field full">
           <span>${esc(config.reasonLabel)}${config.requiresReason ? " *" : ""}</span>
           <textarea name="reason" ${config.requiresReason ? "required" : ""}>${esc(config.defaultReason)}</textarea>
@@ -3796,58 +3828,73 @@ function renderContractDrawer(id) {
   });
 }
 
-function renderPaymentRecordDrawer(contractId, paymentId = null, allowContractSwitch = false) {
+function renderPaymentRecordDrawer(contractId, paymentId = null) {
   const payment = paymentId ? byId(state.payments, paymentId) : null;
-  contractId = payment?.contractId || contractId || visibleContracts()[0]?.id;
+  contractId = payment?.contractId || contractId || "";
   const contract = byId(state.contracts, contractId);
-  if (!contract) return "";
-  const opp = byId(state.opportunities, contract.opportunityId);
-  const summary = contractPaymentSummary(contractId);
-  const suggested = payment?.amountCents || Math.max(0, contract.amountCents - summary.confirmedCents) || contract.amountCents;
-  const contractPicker = allowContractSwitch ? `
-    <section class="card"><label class="field"><span>Contrato do pagamento</span><select data-payment-contract-choice>${visibleContracts().map((item) => {
-      const opportunity = byId(state.opportunities, item.opportunityId);
-      return `<option value="${item.id}" ${item.id === contract.id ? "selected" : ""}>${esc(item.contractNumber)} - ${esc(opportunity?.clientName || "Cliente")}</option>`;
-    }).join("")}</select></label></section>` : "";
+  const opp = contract ? byId(state.opportunities, contract.opportunityId) : null;
+  const summary = contract ? contractPaymentSummary(contract.id) : { confirmedCents: 0, pendingCents: 0 };
+  const suggested = payment?.amountCents || (contract ? Math.max(0, contract.amountCents - summary.confirmedCents) || contract.amountCents : 0);
+  const contractOptions = visibleContracts().map((item) => {
+    const opportunity = byId(state.opportunities, item.opportunityId);
+    return `<option value="${item.id}" ${item.id === contract?.id ? "selected" : ""}>${esc(item.contractNumber)} - ${esc(opportunity?.clientName || "Cliente")}</option>`;
+  }).join("");
   const side = `
-    ${contractPicker}
-    <section class="card">
-      <p class="section-title">Contexto do contrato</p>
-      <div class="detail-list">
-        <div class="detail-row"><span>Contrato</span><strong>${esc(contract.contractNumber)}</strong></div>
-        <div class="detail-row"><span>Cliente</span><strong>${esc(opp?.clientName || "-")}</strong></div>
-        <div class="detail-row"><span>SDR</span><strong>${esc(getActorName(opp?.sdrId))}</strong></div>
-        <div class="detail-row"><span>Forma</span><strong>${esc(paymentPlanLabel(contract.paymentPlan))}</strong></div>
-        <div class="detail-row"><span>Valor contrato</span><strong>${brl(contract.amountCents)}</strong></div>
-        <div class="detail-row"><span>Recebido</span><strong>${brl(summary.confirmedCents)}</strong></div>
-        <div class="detail-row"><span>A confirmar</span><strong>${brl(summary.pendingCents)}</strong></div>
-      </div>
-    </section>
+    ${contract ? `
+      <section class="card">
+        <p class="section-title">Contexto do contrato</p>
+        <div class="detail-list">
+          <div class="detail-row"><span>Contrato</span><strong>${esc(contract.contractNumber)}</strong></div>
+          <div class="detail-row"><span>Cliente</span><strong>${esc(opp?.clientName || "-")}</strong></div>
+          <div class="detail-row"><span>SDR</span><strong>${esc(getActorName(opp?.sdrId))}</strong></div>
+          <div class="detail-row"><span>Forma</span><strong>${esc(paymentPlanLabel(contract.paymentPlan))}</strong></div>
+          <div class="detail-row"><span>Valor contrato</span><strong>${brl(contract.amountCents)}</strong></div>
+          <div class="detail-row"><span>Recebido</span><strong>${brl(summary.confirmedCents)}</strong></div>
+          <div class="detail-row"><span>A confirmar</span><strong>${brl(summary.pendingCents)}</strong></div>
+        </div>
+      </section>
+    ` : `
+      <section class="card payment-external-context">
+        <span class="context-icon">${renderIcon("link-2-off")}</span>
+        <p class="section-title">Fora do CRM</p>
+        <h3>Registro independente</h3>
+        <p>Este pagamento entra no controle e nos relatorios do gestor. Ele nao gera comissao ate ser vinculado a um contrato.</p>
+      </section>
+    `}
     <section class="card notice-card"><strong>Nao e uma cobranca</strong><p>Este formulario apenas registra pagamentos recebidos fora da plataforma.</p></section>
   `;
   const main = `
     <section class="card">
-      <div class="section-head"><div><h3>${payment ? "Editar pagamento externo" : "Registrar pagamento externo"}</h3><p>Documente valor, data, metodo, pagador, referencia e comprovante.</p></div></div>
-      <form class="form-grid" data-payment-record-form="${contract.id}">
+      <div class="section-head"><div><h3>${payment ? "Editar pagamento manual" : "Registrar pagamento manual"}</h3><p>Documente o recebimento e escolha se ele ja pertence a um contrato do CRM.</p></div></div>
+      <form class="form-grid" data-payment-record-form>
         <input name="paymentId" type="hidden" value="${esc(payment?.id || "")}" />
+        <label class="field full payment-link-field">
+          <span>Vinculo com o CRM</span>
+          <select name="contractId" data-payment-link-select>
+            <option value="" ${contract ? "" : "selected"}>Sem vinculo - pagamento por fora do CRM</option>
+            ${contractOptions}
+          </select>
+          <small>Voce pode deixar sem vinculo e conectar este pagamento a um contrato depois.</small>
+        </label>
+        <label class="field full"><span>Cliente ou origem do pagamento *</span><input name="externalClientName" required value="${esc(payment?.externalClientName || opp?.clientName || "")}" placeholder="Ex. Cliente avulso, evento ou nome da empresa" /></label>
         <label class="field"><span>Valor registrado</span><input name="amount" data-money-input inputmode="decimal" required value="${moneyInputValue(suggested)}" /></label>
         <label class="field"><span>Status do registro</span><select name="status"><option value="confirmed" ${!payment || payment.status === "confirmed" ? "selected" : ""}>Confirmado / conferido</option><option value="pending" ${payment?.status === "pending" ? "selected" : ""}>Aguardando conferencia</option></select></label>
-        <label class="field"><span>Tipo</span><select name="type">${[["contract_payment", "Pagamento do contrato"], ["initial", "Entrada"], ["installment", "Parcela"], ["remaining", "Saldo restante"], ["adjustment", "Ajuste"]].map(([value, label]) => `<option value="${value}" ${(!payment && value === "contract_payment") || payment?.type === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+        <label class="field"><span>Tipo</span><select name="type">${[["external", "Pagamento externo"], ["contract_payment", "Pagamento do contrato"], ["initial", "Entrada"], ["installment", "Parcela"], ["remaining", "Saldo restante"], ["adjustment", "Ajuste"]].map(([value, label]) => `<option value="${value}" ${(!payment && value === (contract ? "contract_payment" : "external")) || payment?.type === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
         <label class="field"><span>Metodo externo</span><select name="method">${["Pix", "Transferencia", "Boleto", "Cartao externo", "Dinheiro", "Outro"].map((method) => `<option value="${method}" ${payment?.method === method ? "selected" : ""}>${method}</option>`).join("")}</select></label>
-        <label class="field"><span>Data do pagamento</span><input name="paidAt" type="date" value="${String(payment?.paidAt || nowIso()).slice(0, 10)}" /></label>
-        <label class="field"><span>Vencimento</span><input name="dueDate" type="date" value="${String(payment?.dueDate || nowIso()).slice(0, 10)}" /></label>
+        ${renderDateField("Data do pagamento", "paidAt", String(payment?.paidAt || nowIso()).slice(0, 10))}
+        ${renderDateField("Vencimento", "dueDate", String(payment?.dueDate || "").slice(0, 10))}
         <label class="field"><span>Nome do pagador</span><input name="payerName" value="${esc(payment?.payerName || "")}" placeholder="Pessoa ou empresa pagadora" /></label>
         <label class="field"><span>Numero do recibo</span><input name="receiptNumber" value="${esc(payment?.receiptNumber || "")}" placeholder="Ex. REC-2026-001" /></label>
         <label class="field full"><span>Referencia externa</span><input name="reference" value="${esc(payment?.reference || "")}" placeholder="ID Pix, banco ou identificador da transferencia" /></label>
         <label class="field full"><span>Comprovante ou arquivo recebido</span><input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png" /><small>${payment?.receiptFileName ? `Arquivo atual: ${esc(payment.receiptFileName)}. Envie outro apenas para substituir.` : "PDF, JPG ou PNG de ate 10 MB."}</small></label>
         <label class="field full"><span>Observacoes internas</span><textarea name="notes">${esc(payment?.notes || "")}</textarea></label>
-        <div class="actions full"><button class="button" type="submit">${payment ? "Atualizar registro" : "Salvar registro de pagamento"}</button><button class="button secondary" type="button" data-open-contract="${contract.id}">Voltar ao contrato</button></div>
+        <div class="actions full"><button class="button" type="submit">${payment ? "Atualizar registro" : "Salvar pagamento"}</button>${contract ? `<button class="button secondary" type="button" data-open-contract="${contract.id}">Abrir contrato</button>` : ""}<button class="button ghost" type="button" data-close-drawer>Cancelar</button></div>
       </form>
     </section>`;
   return renderWorkspaceShell({
-    title: `${payment ? "Editar pagamento" : "Pagamento"} - ${contract.contractNumber}`,
-    subtitle: `${esc(opp?.clientName || "Contrato")} - registro informativo`,
-    label: "Registro de pagamento externo",
+    title: payment ? "Editar pagamento" : "Novo pagamento",
+    subtitle: contract ? `${esc(contract.contractNumber)} - ${esc(opp?.clientName || "Contrato")}` : "Registro manual fora do CRM",
+    label: "Registro manual de pagamento",
     main,
     side,
   });
@@ -3961,7 +4008,7 @@ function renderProjectDrawer(id) {
               <label class="field"><span>Tipo</span><select name="type"><option>briefing recebido</option><option>reuniao</option><option>aprovacao</option><option>feedback</option><option>pagamento</option></select></label>
               <label class="field"><span>Canal</span><select name="channel"><option>WhatsApp</option><option>E-mail</option><option>Reuniao</option><option>Instagram</option></select></label>
               <label class="field"><span>Contato externo</span><input name="contact" placeholder="Nome do cliente" /></label>
-              <label class="field"><span>Data real</span><input name="occurredAt" type="date" /></label>
+              ${renderDateField("Data real", "occurredAt")}
               <label class="field full"><span>Resumo</span><textarea name="summary" required></textarea></label>
               <div class="actions full"><button class="button" type="submit">Registrar interacao</button></div>
             </form>
@@ -4363,9 +4410,7 @@ function bindApp() {
 
   document.querySelectorAll("[data-new-payment]").forEach((button) => {
     button.addEventListener("click", () => {
-      const contract = visibleContracts()[0];
-      if (!contract) return toast("Nenhum contrato disponivel para registrar pagamento.");
-      drawer = { type: "paymentRecord", contractId: contract.id, allowContractSwitch: true };
+      drawer = { type: "paymentRecord", contractId: "" };
       render();
     });
   });
@@ -4377,11 +4422,6 @@ function bindApp() {
       drawer = { type: "paymentRecord", contractId: payment.contractId, paymentId: payment.id };
       render();
     });
-  });
-
-  document.querySelector("[data-payment-contract-choice]")?.addEventListener("change", (event) => {
-    drawer = { type: "paymentRecord", contractId: event.currentTarget.value, allowContractSwitch: true };
-    render();
   });
 
   document.querySelectorAll("[data-open-project]").forEach((button) => {
@@ -4434,6 +4474,7 @@ function bindApp() {
   bindForms();
   bindActions();
   bindProgressControls();
+  bindDateControls();
   bindFilters();
 
   document.onkeydown = (event) => {
@@ -4622,7 +4663,7 @@ function bindForms() {
 
   document.querySelector("[data-payment-record-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
-    savePaymentRecord(event.currentTarget.dataset.paymentRecordForm, event.currentTarget);
+    savePaymentRecord(event.currentTarget);
   });
 
   document.querySelector("[data-payout-payment-form]")?.addEventListener("submit", async (event) => {
@@ -4651,13 +4692,31 @@ function setupFileDelegationField() {
 function setupServicePickers(root = document) {
   root.querySelectorAll("[data-service-picker]").forEach((picker) => {
     const options = [...picker.querySelectorAll("[data-service-option]")];
+    const cards = [...picker.querySelectorAll("[data-service-card]")];
     const count = picker.querySelector("[data-service-count]");
     const sync = () => {
       const selected = options.filter((option) => option.checked);
-      options.forEach((option) => option.closest(".service-check-card")?.classList.toggle("is-selected", option.checked));
+      options.forEach((option) => {
+        const card = option.closest("[data-service-card]");
+        card?.classList.toggle("is-selected", option.checked);
+        card?.setAttribute("aria-checked", String(option.checked));
+      });
       if (count) count.textContent = `${selected.length} selecionado(s)`;
     };
-    options.forEach((option) => option.addEventListener("change", sync));
+    const toggleCard = (card) => {
+      const option = card.querySelector("[data-service-option]");
+      if (!option) return;
+      option.checked = !option.checked;
+      sync();
+    };
+    cards.forEach((card) => {
+      card.addEventListener("click", () => toggleCard(card));
+      card.addEventListener("keydown", (event) => {
+        if (!["Enter", " "].includes(event.key)) return;
+        event.preventDefault();
+        toggleCard(card);
+      });
+    });
     picker.querySelector("[data-clear-services]")?.addEventListener("click", () => {
       options.forEach((option) => option.checked = false);
       sync();
@@ -4829,6 +4888,45 @@ function bindProgressControls() {
         row.querySelector("[data-progress-date-picker]").open = false;
         markProgressRowDirty(row);
       }
+    });
+  });
+}
+
+function bindDateControls() {
+  document.querySelectorAll("[data-date-control]").forEach((control) => {
+    const picker = control.querySelector("[data-date-picker]");
+    const input = control.querySelector("[data-date-input]");
+    const calendar = control.querySelector("[data-date-calendar]");
+    const label = control.querySelector("[data-date-label]");
+
+    picker?.addEventListener("toggle", () => {
+      if (!picker.open) return;
+      document.querySelectorAll(".progress-picker[open]").forEach((other) => {
+        if (other !== picker) other.open = false;
+      });
+    });
+
+    control.addEventListener("click", (event) => {
+      const calendarNav = event.target.closest("[data-progress-calendar-nav]");
+      if (calendarNav) {
+        const currentMonth = parseDateOnly(calendar.dataset.month) || new Date();
+        currentMonth.setDate(1);
+        currentMonth.setMonth(currentMonth.getMonth() + Number(calendarNav.dataset.progressCalendarNav));
+        calendar.dataset.month = dateOnlyValue(currentMonth);
+        calendar.innerHTML = progressCalendarBody(input.value, calendar.dataset.month);
+        refreshIcons();
+        return;
+      }
+
+      const clearButton = event.target.closest("[data-progress-date-clear]");
+      const dateButton = event.target.closest("[data-progress-date-value]");
+      if (!clearButton && !dateButton) return;
+      input.value = clearButton ? "" : dateButton.dataset.progressDateValue;
+      label.textContent = input.value ? dateLabel(input.value) : "Definir data";
+      label.classList.toggle("is-placeholder", !input.value);
+      picker.open = false;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
     });
   });
 }
@@ -5721,23 +5819,27 @@ function registerContractPayment(contractId) {
   render();
 }
 
-async function savePaymentRecord(contractId, formElement) {
-  const contract = byId(state.contracts, contractId);
-  if (!contract || currentUser.role !== "admin_manager") return toast("Apenas o gestor pode registrar pagamentos.");
-  if (contract.amountCents <= 0) return toast("Defina o valor do contrato antes de registrar pagamentos.");
+async function savePaymentRecord(formElement) {
+  if (currentUser.role !== "admin_manager") return toast("Apenas o gestor pode registrar pagamentos.");
   const form = new FormData(formElement);
+  const contractId = String(form.get("contractId") || "");
+  const contract = contractId ? byId(state.contracts, contractId) : null;
+  if (contractId && !contract) return toast("O contrato selecionado nao foi encontrado.");
   const paymentId = String(form.get("paymentId") || "") || uid("pay");
   const existing = byId(state.payments, paymentId);
   const amountCents = cents(form.get("amount"));
   if (!amountCents) return toast("Informe um valor valido para o registro.");
+  const externalClientName = String(form.get("externalClientName") || "").trim();
+  if (!externalClientName) return toast("Informe o cliente ou a origem do pagamento.");
   const status = form.get("status") === "confirmed" ? "confirmed" : "pending";
   const paidAtDate = form.get("paidAt");
-  const dueDate = form.get("dueDate") || paidAtDate || nowIso().slice(0, 10);
+  if (status === "confirmed" && !paidAtDate) return toast("Defina a data do pagamento confirmado.");
+  const dueDate = form.get("dueDate") || null;
   const receiptFile = form.get("receiptFile");
   let receiptAttachmentId = existing?.receiptAttachmentId || "";
   if (receiptFile?.name) {
     try {
-      const attachment = await uploadPortalAttachment(receiptFile, { kind: "customer_payment_receipt", contractId, paymentId });
+      const attachment = await uploadPortalAttachment(receiptFile, { kind: "customer_payment_receipt", contractId: contract?.id || null, paymentId });
       receiptAttachmentId = attachment?.id || "";
     } catch {
       return toast("Não foi possível enviar o comprovante. Tente novamente.");
@@ -5746,9 +5848,10 @@ async function savePaymentRecord(contractId, formElement) {
   const payment = {
     ...(existing || {}),
     id: paymentId,
-    contractId,
+    contractId: contract?.id || null,
+    externalClientName,
     amountCents,
-    type: form.get("type") || "contract_payment",
+    type: form.get("type") || (contract ? "contract_payment" : "external"),
     method: form.get("method") || "",
     payerName: String(form.get("payerName") || "").trim(),
     receiptNumber: String(form.get("receiptNumber") || "").trim(),
@@ -5763,19 +5866,24 @@ async function savePaymentRecord(contractId, formElement) {
     receiptFileName: receiptFile?.name || existing?.receiptFileName || "",
     receiptAttachmentId,
     recordSource: "manual",
+    recordMode: contract ? "linked" : "external",
   };
   if (existing) Object.assign(existing, payment);
   else state.payments.unshift(payment);
-  const opp = byId(state.opportunities, contract.opportunityId);
+  const opp = contract && byId(state.opportunities, contract.opportunityId);
   opp?.timeline.unshift(event(
     existing ? "external_payment_updated" : (status === "confirmed" ? "external_payment_confirmed" : "external_payment_registered"),
     `${existing ? "Pagamento externo atualizado" : status === "confirmed" ? "Pagamento externo confirmado" : "Pagamento externo registrado"}: ${brl(payment.amountCents)}`,
     currentUser.id,
-    { paymentId: payment.id, contractId }
+    { paymentId: payment.id, contractId: contract?.id || null }
   ));
-  addAudit(existing ? "contract_payment_updated" : "contract_payment_registered", "CustomerPayment", payment.id, { contractId, status: payment.status, recordOnly: true });
+  addAudit(existing ? "customer_payment_updated" : "customer_payment_registered", "CustomerPayment", payment.id, { contractId: contract?.id || null, status: payment.status, recordOnly: true, recordMode: payment.recordMode });
   await saveState();
-  toast(existing ? "Registro de pagamento atualizado." : status === "confirmed" ? "Pagamento externo confirmado e registrado." : "Pagamento externo registrado para conferencia.");
+  toast(existing
+    ? "Registro de pagamento atualizado."
+    : contract
+      ? "Pagamento registrado e vinculado ao contrato."
+      : "Pagamento manual salvo sem vinculo com o CRM.");
   drawer = null;
   currentRoute = "payments";
   render();
@@ -6147,7 +6255,7 @@ function exportCsv(type) {
     payments: () => [["contrato", "cliente", "valor", "metodo", "referencia", "comprovante", "status", "data", "observacao"], ...visiblePayments().map((item) => {
       const contract = byId(state.contracts, item.contractId);
       const opp = contract && byId(state.opportunities, contract.opportunityId);
-      return [contract?.contractNumber || "-", opp?.clientName || "-", item.amountCents, item.method || "-", item.reference || "-", item.receiptFileName || "-", item.status, item.paidAt || item.dueDate || item.createdAt || "-", item.notes || "-"];
+      return [contract?.contractNumber || "Sem vinculo", item.externalClientName || opp?.clientName || "Registro externo", item.amountCents, item.method || "-", item.reference || "-", item.receiptFileName || "-", item.status, dateLabel(item.paidAt || item.dueDate || item.createdAt), item.notes || "-"];
     })],
     commissions: () => [["sdr", "contrato", "pagamento_id", "pagamento_valor", "base", "taxa_bps", "comissao", "status", "validada_em"], ...commissionRows.map((item) => {
       const contract = byId(state.contracts, item.contractId);

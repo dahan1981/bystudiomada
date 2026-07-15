@@ -48,6 +48,8 @@ test("primary routes and workspaces do not overflow the viewport", async ({ page
 
   await goToRoute(page, "opportunities");
   await page.locator("[data-new-opportunity]").first().click();
+  await expect(page.locator('input[type="date"], input[type="datetime-local"]')).toHaveCount(0);
+  await expect(page.locator("[data-drawer-panel] [data-date-control]")).toHaveCount(2);
   const workspace = await page.evaluate(() => {
     const panel = document.querySelector("[data-drawer-panel]");
     return panel ? { clientWidth: panel.clientWidth, scrollWidth: panel.scrollWidth } : null;
@@ -98,8 +100,8 @@ test("manager completes the repaired operational flows", async ({ page, request 
 
   await page.locator("[data-new-opportunity]").first().click();
   await expect(page.locator("[data-service-count]")).toHaveText("0 selecionado(s)");
-  await page.getByText("Branding", { exact: true }).click();
-  await page.getByText("Landing Page", { exact: true }).click();
+  await page.locator('[data-service-card]:has(input[value="srv-branding"])').click();
+  await page.locator('[data-service-card]:has(input[value="srv-landing-page"])').click();
   await expect(page.locator("[data-service-count]")).toHaveText("2 selecionado(s)");
   await expect(page.locator(".service-check-card.is-selected")).toHaveCount(2);
   await page.locator("[data-drawer-panel] header [data-close-drawer]").click();
@@ -140,11 +142,24 @@ test("manager completes the repaired operational flows", async ({ page, request 
   await expect(page.getByText("0 nao lida(s)")).toBeVisible();
 
   await goToRoute(page, "payments");
-  await page.getByRole("button", { name: /Novo registro/ }).click();
+  await page.getByRole("button", { name: /Novo pagamento/ }).click();
+  await expect(page.getByText("Registro manual fora do CRM", { exact: true })).toBeVisible();
+  await page.getByLabel("Cliente ou origem do pagamento *").fill("Pagamento Avulso E2E");
+  await page.getByLabel("Valor registrado").fill("1.250,00");
   await page.getByLabel("Nome do pagador").fill("Cliente Financeiro LTDA");
   await page.getByLabel("Numero do recibo").fill("REC-TESTE-001");
-  await page.getByRole("button", { name: "Salvar registro de pagamento" }).click();
-  await expect(page.getByText("Registro de pagamento atualizado.").or(page.getByText("Pagamento externo confirmado e registrado."))).toBeVisible();
+  await expect(page.locator('input[type="date"], input[type="datetime-local"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Salvar pagamento" }).click();
+  await expect(page.getByText("Pagamento manual salvo sem vinculo com o CRM.")).toBeVisible();
+
+  let paymentRow = page.locator("tbody tr", { hasText: "Pagamento Avulso E2E" });
+  await expect(paymentRow.getByText("Sem vinculo")).toBeVisible();
+  await paymentRow.getByRole("button", { name: "Editar" }).click();
+  await page.getByLabel("Vinculo com o CRM").selectOption("ctr-1");
+  await page.getByRole("button", { name: "Atualizar registro" }).click();
+  await expect(page.getByText("Registro de pagamento atualizado.")).toBeVisible();
+  paymentRow = page.locator("tbody tr", { hasText: "Pagamento Avulso E2E" });
+  await expect(paymentRow.getByText("MADA-TESTE")).toBeVisible();
 
   await goToRoute(page, "projects");
   await page.getByRole("button", { name: /Adicionar projeto/ }).click();
