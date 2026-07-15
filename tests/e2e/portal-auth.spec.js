@@ -56,6 +56,24 @@ test("primary routes and workspaces do not overflow the viewport", async ({ page
   expect(workspace.scrollWidth).toBeLessThanOrEqual(workspace.clientWidth);
 });
 
+test("manager reviews a pending condition from opportunity actions", async ({ page, request }) => {
+  await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });
+  await page.goto("/api/e2e-login");
+  await goToRoute(page, "opportunities");
+
+  const pendingRow = page.locator("tr", { hasText: "Cliente Aprovacao" });
+  await expect(pendingRow.getByRole("button", { name: "Analisar" })).toBeVisible();
+  await pendingRow.getByRole("button", { name: "Analisar" }).click();
+
+  await expect(page.getByText("Condicao aguardando sua aprovacao", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Aprovar sem alteracao" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Aprovar com alteracoes" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Solicitar informacoes" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Recusar" })).toBeVisible();
+  await page.locator("[data-drawer-panel] header [data-close-drawer]").click();
+  await expect(page.locator("[data-drawer-panel]")).toHaveCount(0);
+});
+
 test("manager completes the repaired operational flows", async ({ page, request }) => {
   test.setTimeout(60_000);
   await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });

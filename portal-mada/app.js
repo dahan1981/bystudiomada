@@ -1836,12 +1836,13 @@ function opportunityTable(items, approvalMode = false) {
               <td class="next-action-cell">${item.nextAction ? esc(item.nextAction) : `<span class="badge danger-soft">Sem próxima ação</span>`}</td>
               <td>${dateLabel(item.createdAt)}</td>
               <td class="row-actions opportunity-actions">
-                ${approvalMode ? `<button class="button compact-button" type="button" data-open-opportunity="${item.id}">${renderIcon("badge-check")} Decidir</button>` : ""}
+                ${approvalMode || (currentUser.role === "admin_manager" && item.status === "pending_approval") ? `<button class="button compact-button" type="button" data-open-opportunity="${item.id}">${renderIcon("badge-check")} ${approvalMode ? "Decidir" : "Analisar"}</button>` : ""}
                 <details class="row-menu">
                   <summary class="icon-button" aria-label="Ações da oportunidade">${renderIcon("ellipsis")}</summary>
                   <div class="row-menu-popover">
                     <span class="row-menu-label">Ações</span>
                     <button type="button" data-open-opportunity="${item.id}">${renderIcon("external-link")}<span><strong>Abrir oportunidade</strong><small>Ver contexto completo</small></span></button>
+                    ${currentUser.role === "admin_manager" && item.status === "pending_approval" ? `<button type="button" data-open-opportunity="${item.id}">${renderIcon("badge-check")}<span><strong>Analisar condição</strong><small>Aprovar, ajustar ou devolver para a SDR</small></span></button>` : ""}
                     ${currentUser.role === "sdr" && item.sdrId === currentUser.id && canRequestConditionApproval(item) ? `<button type="button" data-submit-opportunity="${item.id}">${renderIcon("send")}<span><strong>Pedir aprovação</strong><small>Enviar condição ao gestor</small></span></button>` : ""}
                     <button type="button" data-archive-opportunity="${item.id}">${renderIcon("archive")}<span><strong>Arquivar</strong><small>Remover da visão ativa</small></span></button>
                     <button type="button" data-duplicate-opportunity="${item.id}">${renderIcon("copy")}<span><strong>Duplicar</strong><small>Criar a partir deste registro</small></span></button>
@@ -3138,17 +3139,6 @@ function renderOpportunityDrawer(id) {
             </div>
           </section>
 
-          ${canSdrAct && canRequestConditionApproval(opp) ? `
-            <section class="card opportunity-next-step">
-              <div>
-                <span>Próximo passo</span>
-                <h3>Enviar a condição para aprovação</h3>
-                <p>${approvalMissing.length ? `Complete ${esc(approvalMissing.join(", "))} antes do envio.` : "Os dados mínimos estão completos. O gestor receberá esta oportunidade na fila de aprovações."}</p>
-              </div>
-              <button class="button" type="button" data-submit-opportunity="${opp.id}">${renderIcon("send")} Pedir aprovação</button>
-            </section>
-          ` : ""}
-
           ${canEdit ? `
             <form data-opportunity-edit-form="${opp.id}">
               ${opportunityFormFields(opp)}
@@ -3162,21 +3152,9 @@ function renderOpportunityDrawer(id) {
           ${condition ? renderConditionCard(condition) : ""}
           ${contract ? renderCommercialContractCard(contract, payment) : ""}
 
-          <section class="card">
+          <section class="card opportunity-action-card">
             <p class="section-title">Acoes</p>
-            <div class="actions" style="margin-top:0">
-              ${canManage && opp.status === "pending_approval" ? renderApprovalActions(opp) : ""}
-              ${canSdrAct && opp.status === "needs_information" ? `<button class="button" data-open-opportunity-follow="${opp.id}" data-follow-action="answer_information">Responder informações</button>` : ""}
-              ${canSdrAct && ["presented_to_client", "awaiting_client_response"].includes(opp.status) ? `
-                <button class="button success" data-client-accepted="${opp.id}">Cliente aceitou</button>
-                <button class="button secondary" data-open-opportunity-follow="${opp.id}" data-follow-action="client_revision">Registrar revisão</button>
-                <button class="button danger" data-open-opportunity-follow="${opp.id}" data-follow-action="client_declined">Cliente recusou</button>
-              ` : ""}
-              ${canManage && contract?.status === "sent" ? `<button class="button" data-sign-contract="${contract.id}">Confirmar assinatura</button>` : ""}
-              ${canManage && payment && payment.status !== "confirmed" ? `<button class="button" data-confirm-payment="${payment.id}">Confirmar pagamento inicial</button>` : ""}
-              ${canManage && contract?.status === "signed" && payment?.status === "confirmed" && !contract.saleValidatedAt ? `<button class="button success" data-validate-sale="${contract.id}">Validar venda</button>` : ""}
-              ${renderOpportunityFollowForm(opp)}
-            </div>
+            ${renderOpportunityActionPanel(opp, contract, payment, { canManage, canSdrAct, approvalMissing })}
           </section>
 
           <section class="card">
@@ -3207,6 +3185,106 @@ function renderApprovalActions(opp) {
     <button class="button secondary" data-open-approval-action="${opp.id}" data-approval-action="needs_information">Solicitar informacoes</button>
     <button class="button danger" data-open-approval-action="${opp.id}" data-approval-action="rejected">Recusar</button>
     ${selectedAction ? renderApprovalFollowActionMenu(opp, selectedAction) : ""}
+  `;
+}
+
+function renderOpportunityActionPanel(opp, contract, payment, permissions) {
+  const { canManage, canSdrAct, approvalMissing } = permissions;
+  const approvedStatuses = ["commercial_condition_approved", "presented_to_client", "awaiting_client_response", "client_accepted"];
+  let tone = "neutral";
+  let icon = "circle-help";
+  let eyebrow = "Status atual";
+  let title = "Nenhuma decisao pendente";
+  let description = `A oportunidade esta em ${statusLabels[opp.status] || opp.status}.`;
+  let primaryActions = "";
+
+  if (canManage && opp.status === "pending_approval") {
+    tone = "review";
+    icon = "badge-check";
+    eyebrow = "Decisao do gestor";
+    title = "Condicao aguardando sua aprovacao";
+    description = "Revise valor, desconto, forma de pagamento, servicos e escopo. Depois escolha uma das quatro decisoes abaixo.";
+    primaryActions = renderApprovalActions(opp);
+  } else if (canManage && opp.status === "needs_information") {
+    tone = "waiting";
+    icon = "clock-3";
+    eyebrow = "Aguardando SDR";
+    title = "Informacoes complementares solicitadas";
+    description = "A decisao sera reaberta aqui quando a SDR responder e reenviar a condicao para analise.";
+  } else if (canManage && ["draft", "rejected"].includes(opp.status)) {
+    tone = opp.status === "rejected" ? "blocked" : "neutral";
+    icon = opp.status === "rejected" ? "circle-x" : "send";
+    eyebrow = opp.status === "rejected" ? "Condicao recusada" : "Aguardando envio";
+    title = opp.status === "rejected" ? "Esta condicao foi recusada" : "A SDR ainda nao pediu aprovacao";
+    description = opp.status === "rejected"
+      ? "O motivo e o historico permanecem na timeline. Uma nova versao deve ser preparada antes de outra analise."
+      : "O gestor pode revisar e editar os dados, mas as decisoes de aprovacao aparecem quando a SDR envia a condicao.";
+  } else if (canManage && approvedStatuses.includes(opp.status)) {
+    tone = "approved";
+    icon = "circle-check";
+    eyebrow = "Condicao aprovada";
+    title = contract ? `Contrato ${contract.contractNumber} aberto` : "Aprovacao concluida";
+    description = contract
+      ? "A decisao comercial foi registrada. Continue pelo contrato, pagamento e validacao da venda."
+      : "A decisao foi registrada e os proximos registros comerciais estao sendo preparados.";
+  } else if (canSdrAct && canRequestConditionApproval(opp)) {
+    tone = approvalMissing.length ? "waiting" : "review";
+    icon = "send";
+    eyebrow = "Proximo passo da SDR";
+    title = "Enviar a condicao para aprovacao";
+    description = approvalMissing.length
+      ? `Complete ${approvalMissing.join(", ")} e salve a oportunidade antes do envio.`
+      : "Os dados minimos estao completos. O gestor recebera esta oportunidade na fila de aprovacoes.";
+    primaryActions = approvalMissing.length
+      ? `<button class="button" type="button" disabled title="Complete os campos indicados">${renderIcon("send")} Pedir aprovacao</button>`
+      : `<button class="button" type="button" data-submit-opportunity="${opp.id}">${renderIcon("send")} Pedir aprovacao</button>`;
+  } else if (canSdrAct && opp.status === "pending_approval") {
+    tone = "waiting";
+    icon = "clock-3";
+    eyebrow = "Em analise";
+    title = "Aguardando decisao do gestor";
+    description = "Quando o gestor decidir, a resposta e o proximo passo aparecerao nesta mesma area.";
+  } else if (canSdrAct && opp.status === "needs_information") {
+    tone = "review";
+    icon = "message-square-more";
+    eyebrow = "Acao necessaria";
+    title = "O gestor pediu mais informacoes";
+    description = "Responda ao pedido para devolver a condicao a fila de analise.";
+    primaryActions = `<button class="button" data-open-opportunity-follow="${opp.id}" data-follow-action="answer_information">Responder informacoes</button>`;
+  } else if (canSdrAct && approvedStatuses.includes(opp.status)) {
+    tone = "approved";
+    icon = "circle-check";
+    eyebrow = "Condicao aprovada";
+    title = "Continue o acompanhamento com a cliente";
+    description = "A proposta e o contrato ficam disponiveis somente para oportunidades atribuidas a voce.";
+  }
+
+  const clientActions = canSdrAct && ["presented_to_client", "awaiting_client_response"].includes(opp.status) ? `
+    <button class="button success" data-client-accepted="${opp.id}">Cliente aceitou</button>
+    <button class="button secondary" data-open-opportunity-follow="${opp.id}" data-follow-action="client_revision">Registrar revisao</button>
+    <button class="button danger" data-open-opportunity-follow="${opp.id}" data-follow-action="client_declined">Cliente recusou</button>
+  ` : "";
+  const managerActions = canManage ? `
+    ${contract?.status === "sent" ? `<button class="button" data-sign-contract="${contract.id}">Confirmar assinatura</button>` : ""}
+    ${payment && payment.status !== "confirmed" ? `<button class="button" data-confirm-payment="${payment.id}">Confirmar pagamento inicial</button>` : ""}
+    ${contract?.status === "signed" && payment?.status === "confirmed" && !contract.saleValidatedAt ? `<button class="button success" data-validate-sale="${contract.id}">Validar venda</button>` : ""}
+  ` : "";
+
+  return `
+    <div class="opportunity-action-context ${tone}">
+      <span class="opportunity-action-icon">${renderIcon(icon)}</span>
+      <div>
+        <span class="opportunity-action-eyebrow">${esc(eyebrow)}</span>
+        <h3>${esc(title)}</h3>
+        <p>${esc(description)}</p>
+      </div>
+    </div>
+    <div class="actions opportunity-decision-actions">
+      ${primaryActions}
+      ${clientActions}
+      ${managerActions}
+      ${renderOpportunityFollowForm(opp)}
+    </div>
   `;
 }
 

@@ -4346,3 +4346,113 @@ td .icon-button {
     border-top: 1px solid var(--line);
   }
 }
+
+/* Opportunity approval decision flow */
+.opportunity-action-card {
+  overflow: visible;
+}
+
+.opportunity-action-context {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8f9fb;
+}
+
+.opportunity-action-context.review {
+  border-color: #cfc8ff;
+  background: #f8f7ff;
+}
+
+.opportunity-action-context.waiting {
+  border-color: #ead9a7;
+  background: #fffaf0;
+}
+
+.opportunity-action-context.approved {
+  border-color: #bde4d2;
+  background: #f2fbf7;
+}
+
+.opportunity-action-context.blocked {
+  border-color: #efc6cc;
+  background: #fff6f7;
+}
+
+.opportunity-action-icon {
+  display: inline-flex;
+  width: 38px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.opportunity-action-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.opportunity-action-context.review .opportunity-action-icon {
+  color: var(--brand);
+  border-color: #cfc8ff;
+}
+
+.opportunity-action-context.approved .opportunity-action-icon {
+  color: var(--success);
+  border-color: #bde4d2;
+}
+
+.opportunity-action-context.blocked .opportunity-action-icon {
+  color: var(--danger);
+  border-color: #efc6cc;
+}
+
+.opportunity-action-eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.opportunity-action-context h3 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.opportunity-action-context p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.opportunity-decision-actions {
+  margin-top: 14px;
+}
+
+.opportunity-decision-actions .approval-follow-menu {
+  flex: 1 0 100%;
+}
+
+@media (max-width: 520px) {
+  .opportunity-action-context {
+    grid-template-columns: 34px minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .opportunity-action-icon {
+    width: 34px;
+    height: 34px;
+  }
+}
