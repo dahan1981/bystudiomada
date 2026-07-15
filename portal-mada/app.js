@@ -274,6 +274,7 @@ const currentMomentOptions = [
 ];
 
 const nextActionOptions = [
+  "Mapear contato e contexto",
   "Fazer primeiro contato",
   "Fazer follow-up",
   "Aguardar resposta do cliente",
@@ -282,11 +283,41 @@ const nextActionOptions = [
   "Preparar proposta",
   "Enviar proposta",
   "Negociar condicoes",
+  "Enviar condicao para aprovacao",
   "Cobrar assinatura do contrato",
   "Confirmar pagamento",
+  "Iniciar projeto",
   "Retomar nutricao",
   "Encerrar oportunidade",
 ];
+
+const crmPipelineStatuses = [
+  "lead_mapped",
+  "first_contact",
+  "follow_up",
+  "replied",
+  "manager_meeting",
+  "proposal_sent_crm",
+  "negotiating",
+  "awaiting_contract_payment",
+  "sale_completed",
+];
+
+const crmSpecialStatuses = ["nurturing", "lost"];
+
+const nextActionSuggestions = {
+  lead_mapped: ["Mapear contato e contexto", "Fazer primeiro contato"],
+  first_contact: ["Fazer follow-up", "Aguardar resposta do cliente"],
+  follow_up: ["Fazer follow-up", "Aguardar resposta do cliente", "Agendar reuniao"],
+  replied: ["Agendar reuniao", "Realizar reuniao com gestores"],
+  manager_meeting: ["Preparar proposta", "Enviar condicao para aprovacao"],
+  proposal_sent_crm: ["Fazer follow-up", "Negociar condicoes"],
+  negotiating: ["Preparar proposta", "Negociar condicoes", "Enviar condicao para aprovacao"],
+  awaiting_contract_payment: ["Cobrar assinatura do contrato", "Confirmar pagamento"],
+  sale_completed: ["Iniciar projeto"],
+  nurturing: ["Retomar nutricao", "Fazer follow-up"],
+  lost: ["Encerrar oportunidade"],
+};
 
 const statusClasses = {
   draft: "draft",
@@ -1752,14 +1783,181 @@ function renderNotifications() {
   `;
 }
 
+function progressStageTrack(status) {
+  const activeIndex = crmPipelineStatuses.indexOf(status);
+  const special = crmSpecialStatuses.includes(status);
+  return crmPipelineStatuses.map((_, index) => `<i class="${special || index <= activeIndex ? "is-active" : ""}"></i>`).join("");
+}
+
+function progressStageOptions(status) {
+  const option = (key) => `
+    <button type="button" class="progress-option ${status === key ? "is-selected" : ""}" data-progress-stage-value="${key}">
+      <span class="progress-option-dot stage-${key}"></span>
+      <span>${esc(crmStatusLabels[key])}</span>
+      ${status === key ? renderIcon("check") : ""}
+    </button>
+  `;
+  return `
+    <div class="progress-option-group">
+      <span class="progress-popover-title">Pipeline principal</span>
+      ${crmPipelineStatuses.map(option).join("")}
+    </div>
+    <div class="progress-option-group special">
+      <span class="progress-popover-title">Estados especiais</span>
+      ${crmSpecialStatuses.map(option).join("")}
+    </div>
+  `;
+}
+
+function progressActionButtons(options, selected) {
+  return options.map((actionName) => `
+    <button type="button" class="progress-option ${selected === actionName ? "is-selected" : ""}" data-progress-action-value="${esc(actionName)}" data-action-search="${esc(actionName.toLowerCase())}">
+      <span>${esc(actionName)}</span>
+      ${selected === actionName ? renderIcon("check") : ""}
+    </button>
+  `).join("");
+}
+
+function progressActionOptions(status, selected) {
+  const suggested = nextActionSuggestions[status] || nextActionOptions.slice(0, 3);
+  return `
+    <div class="progress-option-group" data-progress-suggested-group>
+      <span class="progress-popover-title">Sugeridas para esta etapa</span>
+      <div data-progress-suggested-list>${progressActionButtons(suggested, selected)}</div>
+    </div>
+    <div class="progress-option-group">
+      <span class="progress-popover-title">Todas as ações</span>
+      ${progressActionButtons(nextActionOptions, selected)}
+    </div>
+  `;
+}
+
+function parseDateOnly(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function dateOnlyValue(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function progressDateLabel(value) {
+  const date = parseDateOnly(value);
+  return date ? new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "short", year: "numeric" }).format(date).replace(" de ", " ") : "Definir data";
+}
+
+function progressCalendarBody(selectedValue, monthValue) {
+  const selected = parseDateOnly(selectedValue);
+  const monthDate = parseDateOnly(monthValue) || selected || new Date();
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+  const firstWeekday = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayValue = dateOnlyValue(new Date());
+  const cells = [];
+  for (let index = 0; index < 42; index += 1) {
+    const day = index - firstWeekday + 1;
+    if (day < 1 || day > daysInMonth) {
+      cells.push("<span></span>");
+      continue;
+    }
+    const value = dateOnlyValue(new Date(year, month, day));
+    cells.push(`<button type="button" class="${value === selectedValue ? "is-selected" : ""} ${value === todayValue ? "is-today" : ""}" data-progress-date-value="${value}">${day}</button>`);
+  }
+  const monthLabel = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(year, month, 1));
+  return `
+    <div class="progress-calendar-head">
+      <button type="button" data-progress-calendar-nav="-1" aria-label="Mes anterior">${renderIcon("chevron-left")}</button>
+      <strong>${esc(monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1))}</strong>
+      <button type="button" data-progress-calendar-nav="1" aria-label="Proximo mes">${renderIcon("chevron-right")}</button>
+    </div>
+    <div class="progress-calendar-week"><span>D</span><span>S</span><span>T</span><span>Q</span><span>Q</span><span>S</span><span>S</span></div>
+    <div class="progress-calendar-days">${cells.join("")}</div>
+    <div class="progress-calendar-foot">
+      <button type="button" data-progress-date-clear>Limpar</button>
+      <button type="button" data-progress-date-value="${todayValue}">Hoje</button>
+    </div>
+  `;
+}
+
+function renderProgressStagePicker(item) {
+  const status = item.crmStatus || "lead_mapped";
+  return `
+    <input type="hidden" data-progress-crm-status value="${esc(status)}" />
+    <details class="progress-picker stage-picker" data-progress-stage-picker>
+      <summary>
+        <span class="progress-stage-summary">
+          <span class="progress-stage-pill stage-${status}" data-progress-stage-label>${esc(crmStatusLabels[status])}</span>
+          <span class="progress-stage-track" data-progress-stage-track>${progressStageTrack(status)}</span>
+        </span>
+        ${renderIcon("chevron-down")}
+      </summary>
+      <div class="progress-popover stage-popover">${progressStageOptions(status)}</div>
+    </details>
+  `;
+}
+
+function renderProgressActionPicker(item) {
+  const status = item.crmStatus || "lead_mapped";
+  return `
+    <input type="hidden" data-progress-next-action value="${esc(item.nextAction || "")}" />
+    <details class="progress-picker action-picker" data-progress-action-picker>
+      <summary>
+        <span class="${item.nextAction ? "" : "is-placeholder"}" data-progress-action-label>${esc(item.nextAction || "Selecionar ação")}</span>
+        ${renderIcon("chevron-down")}
+      </summary>
+      <div class="progress-popover action-popover">
+        <label class="progress-action-search">${renderIcon("search")}<input type="search" placeholder="Buscar ação..." data-progress-action-search /></label>
+        <div class="progress-action-options" data-progress-action-options>${progressActionOptions(status, item.nextAction || "")}</div>
+      </div>
+    </details>
+  `;
+}
+
+function renderProgressDatePicker(item) {
+  const selected = item.nextActionDate || "";
+  const monthValue = selected || dateOnlyValue(new Date());
+  return `
+    <input type="hidden" data-progress-next-date value="${esc(selected)}" />
+    <details class="progress-picker date-picker" data-progress-date-picker>
+      <summary>${renderIcon("calendar-days")}<span class="${selected ? "" : "is-placeholder"}" data-progress-date-label>${esc(progressDateLabel(selected))}</span></summary>
+      <div class="progress-popover progress-calendar" data-progress-calendar data-month="${monthValue}">${progressCalendarBody(selected, monthValue)}</div>
+    </details>
+  `;
+}
+
+function renderProgressConditionAction(item) {
+  const canAct = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && item.sdrId === currentUser.id);
+  const missing = conditionApprovalMissingFields(item);
+  if (item.status === "pending_approval") {
+    return currentUser.role === "admin_manager"
+      ? `<button class="progress-condition review" type="button" data-open-opportunity="${item.id}">${renderIcon("badge-check")} Revisar condição</button>`
+      : `<span class="progress-condition waiting">${renderIcon("clock-3")} Em análise</span>`;
+  }
+  if (item.status === "needs_information") {
+    return `<button class="progress-condition info" type="button" data-open-opportunity="${item.id}">${renderIcon("message-square-more")} ${currentUser.role === "sdr" ? "Responder gestor" : "Aguardando SDR"}</button>`;
+  }
+  if (["commercial_condition_approved", "presented_to_client", "awaiting_client_response", "client_accepted"].includes(item.status)) {
+    return `<span class="progress-condition approved">${renderIcon("circle-check")} Condição aprovada</span>`;
+  }
+  if (item.status === "rejected") {
+    return `<button class="progress-condition rejected" type="button" data-open-opportunity="${item.id}">${renderIcon("circle-x")} Condição recusada</button>`;
+  }
+  if (!canAct) return "";
+  return missing.length
+    ? `<button class="progress-condition draft" type="button" data-open-opportunity="${item.id}" title="Complete ${esc(missing.join(", "))}">${renderIcon("file-pen-line")} Completar condição</button>`
+    : `<button class="progress-condition draft" type="button" data-submit-opportunity="${item.id}">${renderIcon("send")} Pedir aprovação</button>`;
+}
+
 function renderOpportunityProgress() {
   const items = operationalOpportunities();
   return `
     ${pageHead(
       "Andamento",
       currentUser.role === "admin_manager"
-        ? "Controle global do andamento das oportunidades"
-        : "Controle o andamento das oportunidades que voce cadastrou"
+        ? "Atualize etapa, próxima ação e prazo sem sair da rotina comercial"
+        : "Organize seus próximos contatos e envie condições para aprovação"
     )}
     ${items.length ? `
       <div class="table-wrap progress-table">
@@ -1777,30 +1975,27 @@ function renderOpportunityProgress() {
           </thead>
           <tbody>
             ${items.map((item) => `
-              <tr data-progress-row="${item.id}">
-                <td>
+              <tr class="progress-row" data-progress-row="${item.id}">
+                <td class="progress-client" data-label="Cliente">
                   <strong>${esc(item.clientName)}</strong>
-                  <br><span style="color:var(--muted)">${esc(item.brandName || "-")}</span>
+                  <span>${esc(item.brandName && item.brandName !== item.clientName ? item.brandName : item.instagram || "Sem perfil informado")}</span>
                 </td>
-                <td>${esc(getActorName(item.sdrId))}</td>
-                <td>
-                  <select class="table-select" data-progress-crm-status>
-                    ${Object.entries(crmStatusLabels).map(([key, label]) => `<option value="${key}" ${(item.crmStatus || "lead_mapped") === key ? "selected" : ""}>${label}</option>`).join("")}
-                  </select>
-                </td>
-                <td><select class="table-select next-action-select" data-progress-next-action>${nextActionSelectOptions(item.nextAction)}</select></td>
-                <td><input data-progress-next-date type="date" value="${esc(item.nextActionDate || "")}" /></td>
-                <td><textarea data-progress-notes rows="2" placeholder="Observações">${esc(item.notes || "")}</textarea></td>
-                <td class="row-actions">
-                  <button class="button" type="button" data-save-opportunity-progress="${item.id}">Salvar</button>
-                  <button class="icon-button" type="button" data-open-opportunity="${item.id}" aria-label="Ver oportunidade">👁</button>
+                <td class="progress-owner" data-label="SDR">${esc(getActorName(item.sdrId))}</td>
+                <td class="progress-stage-cell" data-label="Etapa">${renderProgressStagePicker(item)}</td>
+                <td class="progress-action-cell" data-label="Próxima ação">${renderProgressActionPicker(item)}</td>
+                <td class="progress-date-cell" data-label="Data">${renderProgressDatePicker(item)}</td>
+                <td class="progress-notes-cell" data-label="Observações"><input data-progress-notes value="${esc(item.notes || "")}" placeholder="Adicionar observação" /></td>
+                <td class="progress-row-actions" data-label="Ações">
+                  ${renderProgressConditionAction(item)}
+                  <button class="button compact-button progress-save" type="button" data-save-opportunity-progress="${item.id}" hidden>Salvar</button>
+                  <button class="icon-button" type="button" data-open-opportunity="${item.id}" aria-label="Ver oportunidade">${renderIcon("eye")}</button>
                 </td>
               </tr>
             `).join("")}
           </tbody>
         </table>
       </div>
-    ` : `<section class="card">${empty("Nenhuma oportunidade para acompanhar", "→")}</section>`}
+    ` : `<section class="card">${empty("Nenhuma oportunidade para acompanhar", "arrow-right")}</section>`}
   `;
 }
 
@@ -3211,14 +3406,23 @@ function renderOpportunityActionPanel(opp, contract, payment, permissions) {
     eyebrow = "Aguardando SDR";
     title = "Informacoes complementares solicitadas";
     description = "A decisao sera reaberta aqui quando a SDR responder e reenviar a condicao para analise.";
-  } else if (canManage && ["draft", "rejected"].includes(opp.status)) {
-    tone = opp.status === "rejected" ? "blocked" : "neutral";
-    icon = opp.status === "rejected" ? "circle-x" : "send";
-    eyebrow = opp.status === "rejected" ? "Condicao recusada" : "Aguardando envio";
-    title = opp.status === "rejected" ? "Esta condicao foi recusada" : "A SDR ainda nao pediu aprovacao";
-    description = opp.status === "rejected"
-      ? "O motivo e o historico permanecem na timeline. Uma nova versao deve ser preparada antes de outra analise."
-      : "O gestor pode revisar e editar os dados, mas as decisoes de aprovacao aparecem quando a SDR envia a condicao.";
+  } else if (canManage && opp.status === "draft") {
+    tone = approvalMissing.length ? "waiting" : "review";
+    icon = "send";
+    eyebrow = "Condicao em rascunho";
+    title = approvalMissing.length ? "Complete a condicao antes da analise" : "Condicao pronta para entrar em analise";
+    description = approvalMissing.length
+      ? `Ainda falta ${approvalMissing.join(", ")}. O gestor pode completar os dados nesta tela.`
+      : "Envie a condicao para analise. Em seguida, as quatro decisoes do gestor aparecerao nesta mesma area.";
+    primaryActions = approvalMissing.length
+      ? `<button class="button" type="button" disabled>${renderIcon("send")} Enviar para analise</button>`
+      : `<button class="button" type="button" data-submit-opportunity="${opp.id}">${renderIcon("send")} Enviar para analise</button>`;
+  } else if (canManage && opp.status === "rejected") {
+    tone = "blocked";
+    icon = "circle-x";
+    eyebrow = "Condicao recusada";
+    title = "Esta condicao foi recusada";
+    description = "O motivo e o historico permanecem na timeline. Uma nova versao deve ser preparada antes de outra analise.";
   } else if (canManage && approvedStatuses.includes(opp.status)) {
     tone = "approved";
     icon = "circle-check";
@@ -4229,6 +4433,7 @@ function bindApp() {
 
   bindForms();
   bindActions();
+  bindProgressControls();
   bindFilters();
 
   document.onkeydown = (event) => {
@@ -4531,6 +4736,101 @@ function setupCommissionForm() {
   rateSelect.addEventListener("change", updateAmount);
   baseInput.addEventListener("input", updateAmount);
   sync();
+}
+
+function markProgressRowDirty(row) {
+  if (!row) return;
+  row.classList.add("is-dirty");
+  const saveButton = row.querySelector("[data-save-opportunity-progress]");
+  if (saveButton) saveButton.hidden = false;
+}
+
+function bindProgressControls() {
+  document.querySelectorAll("[data-progress-row]").forEach((row) => {
+    row.querySelectorAll(".progress-picker").forEach((picker) => {
+      picker.addEventListener("toggle", () => {
+        if (!picker.open) return;
+        document.querySelectorAll(".progress-picker[open]").forEach((other) => {
+          if (other !== picker) other.open = false;
+        });
+      });
+    });
+
+    row.querySelector("[data-progress-notes]")?.addEventListener("input", () => markProgressRowDirty(row));
+    row.querySelector("[data-progress-action-search]")?.addEventListener("input", (event) => {
+      const term = event.currentTarget.value.trim().toLowerCase();
+      row.querySelectorAll("[data-progress-action-value]").forEach((button) => {
+        button.hidden = Boolean(term && !button.dataset.actionSearch.includes(term));
+      });
+    });
+
+    row.addEventListener("click", (event) => {
+      const stageButton = event.target.closest("[data-progress-stage-value]");
+      if (stageButton) {
+        const status = stageButton.dataset.progressStageValue;
+        const input = row.querySelector("[data-progress-crm-status]");
+        input.value = status;
+        const label = row.querySelector("[data-progress-stage-label]");
+        label.className = `progress-stage-pill stage-${status}`;
+        label.textContent = crmStatusLabels[status];
+        row.querySelector("[data-progress-stage-track]").innerHTML = progressStageTrack(status);
+        const selectedAction = row.querySelector("[data-progress-next-action]").value;
+        row.querySelector("[data-progress-action-options]").innerHTML = progressActionOptions(status, selectedAction);
+        row.querySelector("[data-progress-stage-picker]").open = false;
+        markProgressRowDirty(row);
+        refreshIcons();
+        return;
+      }
+
+      const actionButton = event.target.closest("[data-progress-action-value]");
+      if (actionButton) {
+        const actionName = actionButton.dataset.progressActionValue;
+        row.querySelector("[data-progress-next-action]").value = actionName;
+        const label = row.querySelector("[data-progress-action-label]");
+        label.textContent = actionName;
+        label.classList.remove("is-placeholder");
+        row.querySelector("[data-progress-action-picker]").open = false;
+        markProgressRowDirty(row);
+        return;
+      }
+
+      const calendarNav = event.target.closest("[data-progress-calendar-nav]");
+      if (calendarNav) {
+        const calendar = row.querySelector("[data-progress-calendar]");
+        const currentMonth = parseDateOnly(calendar.dataset.month) || new Date();
+        currentMonth.setDate(1);
+        currentMonth.setMonth(currentMonth.getMonth() + Number(calendarNav.dataset.progressCalendarNav));
+        const monthValue = dateOnlyValue(currentMonth);
+        const selectedValue = row.querySelector("[data-progress-next-date]").value;
+        calendar.dataset.month = monthValue;
+        calendar.innerHTML = progressCalendarBody(selectedValue, monthValue);
+        refreshIcons();
+        return;
+      }
+
+      const clearDate = event.target.closest("[data-progress-date-clear]");
+      if (clearDate) {
+        row.querySelector("[data-progress-next-date]").value = "";
+        const label = row.querySelector("[data-progress-date-label]");
+        label.textContent = "Definir data";
+        label.classList.add("is-placeholder");
+        row.querySelector("[data-progress-date-picker]").open = false;
+        markProgressRowDirty(row);
+        return;
+      }
+
+      const dateButton = event.target.closest("[data-progress-date-value]");
+      if (dateButton) {
+        const dateValue = dateButton.dataset.progressDateValue;
+        row.querySelector("[data-progress-next-date]").value = dateValue;
+        const label = row.querySelector("[data-progress-date-label]");
+        label.textContent = progressDateLabel(dateValue);
+        label.classList.remove("is-placeholder");
+        row.querySelector("[data-progress-date-picker]").open = false;
+        markProgressRowDirty(row);
+      }
+    });
+  });
 }
 
 function bindActions() {
@@ -4997,9 +5297,11 @@ async function openNotification(id) {
 
 async function submitOpportunity(id) {
   let current = byId(state.opportunities, id);
-  if (currentUser.role !== "sdr" || current?.sdrId !== currentUser.id) return toast("Apenas a SDR responsável pode pedir a aprovação.");
+  const canSubmit = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && current?.sdrId === currentUser.id);
+  if (!canSubmit) return toast("Apenas o gestor ou a SDR responsavel pode enviar a condicao para aprovacao.");
   if (!canRequestConditionApproval(current)) return toast("Esta oportunidade nao pode ser enviada para aprovacao neste status.");
   const missing = conditionApprovalMissingFields(current);
+  if (missing.length) return toast(`Complete ${missing.join(", ")} antes de pedir aprovação.`);
   if (supabaseSyncReady) {
     try {
       await saveState();
@@ -5019,7 +5321,6 @@ async function submitOpportunity(id) {
       return;
     }
   }
-  if (missing.length) return toast(`Complete ${missing.join(", ")} antes de pedir aprovação.`);
   const opp = mutateOpportunity(id, "pending_approval", "Pedido de aprovacao da condicao enviado", "opportunity_submitted");
   if (!opp) return;
   addNotification(`Nova solicitação enviada por ${getActorName(opp.sdrId)}.`, { recipientRole: "admin_manager" });

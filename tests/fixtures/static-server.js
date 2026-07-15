@@ -113,6 +113,20 @@ const server = http.createServer(async (request, response) => {
   if (url.pathname === "/api/portal-workflow") {
     if (!hasManagerSession(request)) return json(response, 401, { error: "Authentication required" });
     const body = await readJson(request);
+    if (body.action === "request_approval") {
+      const opportunity = testState.opportunities.find((item) => item.id === body.opportunityId);
+      if (opportunity) {
+        opportunity.status = "pending_approval";
+        opportunity._version = Number(opportunity._version || 1) + 1;
+        testState.approvalRequests.unshift({
+          id: `approval-${Date.now()}`,
+          opportunityId: opportunity.id,
+          requestedBy: "manager-1",
+          status: "pending",
+          requestedAt: new Date().toISOString(),
+        });
+      }
+    }
     if (body.action === "review_opportunity") {
       const opportunity = testState.opportunities.find((item) => item.id === body.opportunityId);
       if (opportunity) {

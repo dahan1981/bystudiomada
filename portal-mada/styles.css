@@ -4456,3 +4456,582 @@ td .icon-button {
     height: 34px;
   }
 }
+
+/* Operational opportunity progress */
+.progress-table {
+  overflow: visible;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+
+.progress-table table {
+  width: 100%;
+  min-width: 1120px;
+  table-layout: fixed;
+}
+
+.progress-table th:nth-child(1) { width: 18%; }
+.progress-table th:nth-child(2) { width: 8%; }
+.progress-table th:nth-child(3) { width: 17%; }
+.progress-table th:nth-child(4) { width: 17%; }
+.progress-table th:nth-child(5) { width: 12%; }
+.progress-table th:nth-child(6) { width: 15%; }
+.progress-table th:nth-child(7) { width: 13%; }
+
+.progress-table th {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  background: #fbfcfe;
+}
+
+.progress-row {
+  position: relative;
+}
+
+.progress-row.is-dirty {
+  background: #fcfbff;
+}
+
+.progress-row td {
+  height: 68px;
+  padding: 11px 13px;
+  overflow: visible;
+}
+
+.progress-client strong,
+.progress-client span {
+  display: block;
+}
+
+.progress-client strong {
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.progress-client span,
+.progress-owner {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.progress-picker {
+  position: relative;
+  width: 100%;
+}
+
+.progress-picker > summary {
+  min-width: 0;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+  cursor: pointer;
+  list-style: none;
+}
+
+.progress-picker > summary::-webkit-details-marker {
+  display: none;
+}
+
+.progress-picker > summary > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+  color: #91a0b8;
+}
+
+.progress-picker[open] {
+  z-index: 80;
+}
+
+.progress-picker[open] > summary > svg:last-child {
+  transform: rotate(180deg);
+}
+
+.progress-popover {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: -10px;
+  z-index: 90;
+  width: 292px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 8px;
+  border: 1px solid #d8deea;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(20, 26, 38, 0.13);
+}
+
+.progress-stage-summary {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.progress-stage-pill {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px 4px 18px;
+  border-radius: 999px;
+  color: #49536a;
+  background: #eef1f6;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.progress-stage-pill::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #98a8bf;
+}
+
+.progress-stage-pill.stage-manager_meeting,
+.progress-stage-pill.stage-proposal_sent_crm,
+.progress-stage-pill.stage-negotiating {
+  color: #4f46db;
+  background: #f0efff;
+}
+
+.progress-stage-pill.stage-manager_meeting::before,
+.progress-stage-pill.stage-proposal_sent_crm::before,
+.progress-stage-pill.stage-negotiating::before {
+  background: #6d5dfc;
+}
+
+.progress-stage-pill.stage-awaiting_contract_payment {
+  color: #9a6700;
+  background: #fff6d8;
+}
+
+.progress-stage-pill.stage-awaiting_contract_payment::before { background: #d89a17; }
+.progress-stage-pill.stage-sale_completed { color: #087a58; background: #e8faf3; }
+.progress-stage-pill.stage-sale_completed::before { background: #0caf7c; }
+.progress-stage-pill.stage-nurturing { color: #08758b; background: #e8f9fc; }
+.progress-stage-pill.stage-nurturing::before { background: #13abc1; }
+.progress-stage-pill.stage-lost { color: #c73550; background: #fff0f3; }
+.progress-stage-pill.stage-lost::before { background: #ee4965; }
+
+.progress-stage-track {
+  width: 126px;
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: repeat(9, minmax(5px, 1fr));
+  gap: 3px;
+}
+
+.progress-stage-track i {
+  height: 3px;
+  border-radius: 999px;
+  background: #dfe4ed;
+}
+
+.progress-stage-track i.is-active {
+  background: #6d5dfc;
+}
+
+.progress-stage-pill.stage-sale_completed + .progress-stage-track i.is-active { background: #0caf7c; }
+.progress-stage-pill.stage-nurturing + .progress-stage-track i.is-active { background: #13abc1; }
+.progress-stage-pill.stage-lost + .progress-stage-track i.is-active { background: #ee4965; }
+
+.progress-option-group + .progress-option-group {
+  margin-top: 6px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+
+.progress-popover-title {
+  display: block;
+  padding: 5px 8px 7px;
+  color: #8693ad;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.progress-option {
+  width: 100%;
+  min-height: 34px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 5px;
+  color: #26324a;
+  background: transparent;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.progress-option:hover,
+.progress-option.is-selected {
+  color: var(--brand);
+  background: #f6f5ff;
+}
+
+.progress-option > svg {
+  width: 14px;
+  height: 14px;
+}
+
+.progress-option-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #99a9be;
+}
+
+.progress-option-dot.stage-manager_meeting,
+.progress-option-dot.stage-proposal_sent_crm,
+.progress-option-dot.stage-negotiating { background: #6d5dfc; }
+.progress-option-dot.stage-awaiting_contract_payment { background: #d89a17; }
+.progress-option-dot.stage-sale_completed { background: #0caf7c; }
+.progress-option-dot.stage-nurturing { background: #13abc1; }
+.progress-option-dot.stage-lost { background: #ee4965; }
+
+.action-picker > summary,
+.date-picker > summary {
+  justify-content: flex-start;
+  font-size: 11px;
+}
+
+.action-picker > summary > span:first-child {
+  min-width: 0;
+  max-width: calc(100% - 20px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-picker > summary > svg:last-child {
+  margin-left: auto;
+}
+
+.is-placeholder {
+  color: #91a0b8;
+  font-style: italic;
+}
+
+.action-popover {
+  width: 310px;
+}
+
+.progress-action-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 0 9px;
+  border: 1px solid #d8deea;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.progress-action-search svg {
+  width: 14px;
+  height: 14px;
+  color: #91a0b8;
+}
+
+.progress-action-search input {
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  font-size: 11px;
+}
+
+.date-picker > summary {
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.date-picker > summary > svg {
+  width: 14px;
+  height: 14px;
+  color: #8fa0b8;
+}
+
+.progress-calendar {
+  left: -42px;
+  width: 290px;
+  max-height: none;
+  overflow: visible;
+  padding: 10px;
+}
+
+.progress-calendar-head,
+.progress-calendar-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.progress-calendar-head {
+  margin-bottom: 8px;
+}
+
+.progress-calendar-head strong {
+  font-size: 11px;
+}
+
+.progress-calendar-head button,
+.progress-calendar-foot button {
+  border: 0;
+  color: var(--brand);
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.progress-calendar-head button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+}
+
+.progress-calendar-head svg {
+  width: 14px;
+  height: 14px;
+}
+
+.progress-calendar-week,
+.progress-calendar-days {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  text-align: center;
+}
+
+.progress-calendar-week span {
+  padding: 4px 0;
+  color: #8794aa;
+  font-size: 9px;
+}
+
+.progress-calendar-days button,
+.progress-calendar-days > span {
+  width: 30px;
+  height: 30px;
+}
+
+.progress-calendar-days button {
+  border: 1px solid transparent;
+  border-radius: 50%;
+  color: #33405a;
+  background: transparent;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.progress-calendar-days button:hover,
+.progress-calendar-days button.is-today {
+  border-color: #9a8fff;
+}
+
+.progress-calendar-days button.is-selected {
+  color: #fff;
+  border-color: var(--brand);
+  background: var(--brand);
+}
+
+.progress-calendar-foot {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.progress-notes-cell input {
+  width: 100%;
+  min-height: 36px;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: #34405a;
+  background: transparent;
+  font-size: 11px;
+}
+
+.progress-notes-cell input:hover {
+  border-color: #dce1ea;
+}
+
+.progress-notes-cell input:focus {
+  border-color: #8d80ff;
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(107, 88, 255, 0.1);
+  outline: 0;
+}
+
+.progress-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.progress-save[hidden] {
+  display: none !important;
+}
+
+.progress-condition {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: #59657a;
+  background: #f1f3f7;
+  font-size: 9px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+button.progress-condition {
+  cursor: pointer;
+}
+
+.progress-condition svg {
+  width: 12px;
+  height: 12px;
+}
+
+.progress-condition.draft { color: #5648d7; border-color: #d8d2ff; background: #f7f5ff; }
+.progress-condition.review { color: #fff; background: var(--brand); }
+.progress-condition.waiting { color: #956500; background: #fff5d5; }
+.progress-condition.info { color: #08758b; background: #e9f9fc; }
+.progress-condition.approved { color: #087a58; background: #e8faf3; }
+.progress-condition.rejected { color: #c73550; background: #fff0f3; }
+
+@media (max-width: 1500px) {
+  .progress-table {
+    border: 0;
+    background: transparent;
+  }
+
+  .progress-table table,
+  .progress-table tbody {
+    min-width: 0;
+    display: block;
+  }
+
+  .progress-table thead {
+    display: none;
+  }
+
+  .progress-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+
+  .progress-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #fff;
+  }
+
+  .progress-row td {
+    width: auto !important;
+    max-width: none;
+    height: auto;
+    min-height: 72px;
+    display: block;
+    padding: 12px;
+    border-right: 1px solid var(--line);
+  }
+
+  .progress-row td:nth-child(even) {
+    border-right: 0;
+  }
+
+  .progress-row td::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 8px;
+    color: #8794aa;
+    font-size: 8px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .progress-client,
+  .progress-row-actions {
+    grid-column: 1 / -1;
+  }
+
+  .progress-row-actions {
+    min-height: 52px !important;
+    flex-direction: row;
+    justify-content: flex-end;
+    border-right: 0 !important;
+  }
+
+  .progress-row-actions::before {
+    margin-right: auto;
+    margin-bottom: 0 !important;
+  }
+
+  .progress-popover {
+    left: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .progress-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .progress-client,
+  .progress-notes-cell,
+  .progress-row-actions {
+    grid-column: 1 / -1;
+  }
+
+  .progress-row td {
+    border-right: 0;
+    min-height: 66px;
+  }
+
+  .progress-popover,
+  .action-popover,
+  .progress-calendar {
+    right: 0;
+    left: 0;
+    width: min(310px, calc(100vw - 54px));
+  }
+
+  .progress-row-actions {
+    justify-content: flex-start;
+  }
+
+  .progress-row-actions::before {
+    width: 100%;
+    margin-right: 0;
+  }
+}

@@ -74,6 +74,22 @@ test("manager reviews a pending condition from opportunity actions", async ({ pa
   await expect(page.locator("[data-drawer-panel]")).toHaveCount(0);
 });
 
+test("manager sends a draft condition to the real approval state", async ({ page, request }) => {
+  await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });
+  await page.goto("/api/e2e-login");
+  await goToRoute(page, "progress");
+
+  let progressRow = page.locator('[data-progress-row="opp-active"]');
+  await progressRow.getByRole("button", { name: "Pedir aprovação" }).click();
+  await expect(page.getByText("Pedido de aprovacao enviado para a fila do gestor.")).toBeVisible();
+
+  progressRow = page.locator('[data-progress-row="opp-active"]');
+  await expect(progressRow.getByRole("button", { name: "Revisar condição" })).toBeVisible();
+  await progressRow.getByRole("button", { name: "Revisar condição" }).click();
+  await expect(page.getByText("Condicao aguardando sua aprovacao", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Aprovar sem alteracao" })).toBeVisible();
+});
+
 test("manager completes the repaired operational flows", async ({ page, request }) => {
   test.setTimeout(60_000);
   await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });
@@ -90,7 +106,14 @@ test("manager completes the repaired operational flows", async ({ page, request 
 
   await goToRoute(page, "progress");
   const progressRow = page.locator('[data-progress-row="opp-active"]');
-  await progressRow.locator("[data-progress-next-action]").selectOption({ label: "Agendar reuniao" });
+  await progressRow.locator("[data-progress-stage-picker] summary").click();
+  await progressRow.locator('[data-progress-stage-value="manager_meeting"]').click();
+  await progressRow.locator("[data-progress-action-picker] summary").click();
+  await progressRow.locator('[data-progress-action-value="Preparar proposta"]').first().click();
+  await progressRow.locator("[data-progress-date-picker] summary").click();
+  await progressRow.locator('[data-progress-date-value="2026-07-22"]').click();
+  await progressRow.locator("[data-progress-notes]").fill("Alinhar escopo antes da proposta");
+  await expect(progressRow.locator("[data-save-opportunity-progress]")).toBeVisible();
   await progressRow.locator("[data-save-opportunity-progress]").click();
   await expect(page.getByText("Andamento da oportunidade salvo.")).toBeVisible();
 
