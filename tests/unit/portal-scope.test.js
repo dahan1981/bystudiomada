@@ -29,3 +29,23 @@ test("SDR cannot reassign an opportunity or force an approved state", () => {
   assert.equal(opportunity.sdrId, "sdr-a");
   assert.equal(opportunity.status, "draft");
 });
+
+test("SDR cannot alter or restore a manager-rejected opportunity", () => {
+  const source = state();
+  source.opportunities[0] = {
+    ...source.opportunities[0],
+    status: "rejected",
+    terminalRejection: true,
+    archivedAt: "2026-07-15T12:00:00.000Z",
+    clientName: "Cliente bloqueado",
+  };
+  const incoming = visibleStateForUser(source, { id: "sdr-a", role: "sdr" });
+  incoming.opportunities[0].status = "draft";
+  incoming.opportunities[0].archivedAt = null;
+  incoming.opportunities[0].clientName = "Cliente alterado";
+  const merged = mergeStateForUser(source, incoming, { id: "sdr-a", role: "sdr" });
+  const opportunity = merged.opportunities.find((item) => item.id === "opp-a");
+  assert.equal(opportunity.status, "rejected");
+  assert.equal(opportunity.archivedAt, "2026-07-15T12:00:00.000Z");
+  assert.equal(opportunity.clientName, "Cliente bloqueado");
+});

@@ -25,6 +25,16 @@ test("production schema, RLS and private bucket are installed", { skip: !process
       where table_schema = 'public' and table_name = 'customer_payments' and column_name = 'contract_id'
     `);
     assert.equal(paymentContractColumn.rows[0].is_nullable, "YES");
+    const terminalTrigger = await pool.query(`
+      select count(*)::int as count from pg_trigger
+      where tgname = 'portal_00_guard_terminal_rejection' and not tgisinternal
+    `);
+    assert.equal(terminalTrigger.rows[0].count, 1);
+    const unarchivedRejections = await pool.query(`
+      select count(*)::int as count from public.opportunities
+      where approval_status = 'rejected' and archived_at is null
+    `);
+    assert.equal(unarchivedRejections.rows[0].count, 0);
   } finally {
     await pool.end();
   }

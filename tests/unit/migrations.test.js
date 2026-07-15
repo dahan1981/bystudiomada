@@ -13,4 +13,6 @@ test("all portal tables enable RLS and Storage remains private", () => {
   assert(sql.includes("false,\n  10485760"));
   assert(sql.includes("with check"));
   assert(sql.includes("alter column contract_id drop not null"), "manual payments must allow an optional CRM contract");
+  assert(sql.includes("portal_guard_terminal_rejection"), "rejected opportunities must have a terminal database guard");
+  assert(sql.includes("Uma oportunidade recusada pelo gestor nao pode ser alterada ou restaurada"));
 });

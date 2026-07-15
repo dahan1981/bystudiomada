@@ -76,6 +76,28 @@ test("manager reviews a pending condition from opportunity actions", async ({ pa
   await expect(page.locator("[data-drawer-panel]")).toHaveCount(0);
 });
 
+test("manager rejection archives and permanently locks the opportunity", async ({ page, request }) => {
+  await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });
+  await page.goto("/api/e2e-login");
+  await goToRoute(page, "opportunities");
+
+  const pendingRow = page.locator("tr", { hasText: "Cliente Aprovacao" });
+  await pendingRow.getByRole("button", { name: "Analisar" }).click();
+  await page.locator('[data-approval-action="rejected"]').click();
+  await expect(page.getByText("Esta decisao e definitiva.", { exact: false })).toBeVisible();
+  await expect(page.locator('select[name="followAction"]')).toHaveCount(0);
+  await expect(page.locator('input[name="nextActionDate"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Recusar e arquivar" }).click();
+
+  await expect(page.getByRole("heading", { name: "Oportunidades arquivadas" })).toBeVisible();
+  const archivedRow = page.locator("tr", { hasText: "Cliente Aprovacao" });
+  await expect(archivedRow.getByText("Bloqueada")).toBeVisible();
+  await expect(archivedRow.getByRole("button", { name: "Restaurar" })).toHaveCount(0);
+  await archivedRow.getByRole("button", { name: "Ver historico" }).click();
+  await expect(page.getByRole("heading", { name: "Oportunidade arquivada e bloqueada" })).toBeVisible();
+  await expect(page.locator("[data-opportunity-edit-form]")).toHaveCount(0);
+});
+
 test("manager sends a draft condition to the real approval state", async ({ page, request }) => {
   await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });
   await page.goto("/api/e2e-login");

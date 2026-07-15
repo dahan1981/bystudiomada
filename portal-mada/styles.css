@@ -5125,6 +5125,39 @@ button.progress-condition {
   background: #f1eef5;
 }
 
+.archive-lock,
+.terminal-rejection-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #b4233f;
+  font-weight: 750;
+}
+
+.archive-lock {
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid #ffd0d9;
+  border-radius: 5px;
+  background: #fff4f6;
+  font-size: 11px;
+}
+
+.archive-lock svg,
+.terminal-rejection-note svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+
+.terminal-rejection-note {
+  padding: 12px 14px;
+  border-left: 3px solid #d92d4b;
+  border-radius: 4px;
+  background: #fff4f6;
+  line-height: 1.5;
+}
+
 .payment-link-field select {
   font-weight: 650;
 }

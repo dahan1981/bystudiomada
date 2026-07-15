@@ -495,6 +495,8 @@ function normalizeState(data) {
     opportunity.lossReason = opportunity.lossReason || "";
     opportunity.nextAction = opportunity.nextAction || "";
     opportunity.nextActionDate = opportunity.nextActionDate || "";
+    opportunity.archivedAt = opportunity.archivedAt || null;
+    opportunity.terminalRejection = opportunity.terminalRejection === true || opportunity.status === "rejected";
   });
   data.conditions = data.conditions || [];
   data.conditions.forEach((condition) => {
@@ -1024,11 +1026,19 @@ function visibleOpportunities() {
 }
 
 function operationalOpportunities() {
-  return visibleOpportunities().filter((item) => item.status !== "cancelled" && !item.manualProjectOnly);
+  return visibleOpportunities().filter((item) => !isArchivedOpportunity(item) && !item.manualProjectOnly);
 }
 
 function archivedOpportunities() {
-  return visibleOpportunities().filter((item) => item.status === "cancelled" && !item.manualProjectOnly);
+  return visibleOpportunities().filter((item) => isArchivedOpportunity(item) && !item.manualProjectOnly);
+}
+
+function isTerminallyRejected(opportunity) {
+  return Boolean(opportunity && (opportunity.status === "rejected" || opportunity.terminalRejection));
+}
+
+function isArchivedOpportunity(opportunity) {
+  return Boolean(opportunity && (opportunity.status === "cancelled" || opportunity.archivedAt || isTerminallyRejected(opportunity)));
 }
 
 function visibleNotifications() {
@@ -1731,7 +1741,7 @@ function renderArchivedOpportunities() {
   return `
     ${pageHead(
       "Oportunidades arquivadas",
-      "Registros fora da operacao ativa, preservados com historico completo",
+      "Registros fora da operacao ativa; recusas do gestor ficam bloqueadas definitivamente",
       `<button class="button secondary" type="button" data-route="opportunities">${renderIcon("arrow-left")} Voltar para ativas</button>`
     )}
     ${items.length ? `
@@ -1745,18 +1755,20 @@ function renderArchivedOpportunities() {
                 <td>${esc(item.brandName || "-")}</td>
                 <td>${esc(serviceNamesForOpportunity(item))}</td>
                 <td>${esc(getActorName(item.sdrId))}</td>
-                <td>${statusBadge(item.archivedFromStatus || "draft")}</td>
+                <td>${statusBadge(isTerminallyRejected(item) ? "rejected" : item.archivedFromStatus || "draft")}</td>
                 <td>${dateLabel(item.archivedAt || item.updatedAt)}</td>
                 <td class="row-actions">
                   <button class="button secondary" type="button" data-open-opportunity="${item.id}">Ver historico</button>
-                  <button class="button" type="button" data-restore-opportunity="${item.id}">${renderIcon("archive-restore")} Restaurar</button>
+                  ${isTerminallyRejected(item)
+                    ? `<span class="archive-lock">${renderIcon("lock-keyhole")} Bloqueada</span>`
+                    : `<button class="button" type="button" data-restore-opportunity="${item.id}">${renderIcon("archive-restore")} Restaurar</button>`}
                 </td>
               </tr>
             `).join("")}
           </tbody>
         </table>
       </div>
-    ` : `<section class="card">${empty("Nenhuma oportunidade arquivada", "archive", "As oportunidades arquivadas permanecerao disponiveis aqui para consulta e restauracao.")}</section>`}
+    ` : `<section class="card">${empty("Nenhuma oportunidade arquivada", "archive", "Oportunidades arquivadas permanecem para consulta; recusas do gestor nao podem ser restauradas.")}</section>`}
   `;
 }
 
@@ -3339,7 +3351,7 @@ function renderOpportunityDrawer(id) {
   const payment = contract ? paymentForContract(contract.id) : null;
   const canManage = currentUser.role === "admin_manager";
   const canSdrAct = currentUser.role === "sdr" && opp.sdrId === currentUser.id;
-  const canEdit = canManage || canSdrAct;
+  const canEdit = (canManage || canSdrAct) && !isArchivedOpportunity(opp) && !isTerminallyRejected(opp);
   const approvalMissing = conditionApprovalMissingFields(opp);
 
   return `
@@ -3452,12 +3464,14 @@ function renderOpportunityActionPanel(opp, contract, payment, permissions) {
     primaryActions = approvalMissing.length
       ? `<button class="button" type="button" disabled>${renderIcon("send")} Enviar para analise</button>`
       : `<button class="button" type="button" data-submit-opportunity="${opp.id}">${renderIcon("send")} Enviar para analise</button>`;
-  } else if (canManage && opp.status === "rejected") {
+  } else if (isTerminallyRejected(opp)) {
     tone = "blocked";
-    icon = "circle-x";
-    eyebrow = "Condicao recusada";
-    title = "Esta condicao foi recusada";
-    description = "O motivo e o historico permanecem na timeline. Uma nova versao deve ser preparada antes de outra analise.";
+    icon = "lock-keyhole";
+    eyebrow = "Recusa definitiva";
+    title = "Oportunidade arquivada e bloqueada";
+    description = opp.rejectionReason
+      ? `Motivo: ${opp.rejectionReason}`
+      : "A condicao foi recusada pelo gestor. Este registro permanece apenas para consulta e nao pode ser alterado ou restaurado.";
   } else if (canManage && approvedStatuses.includes(opp.status)) {
     tone = "approved";
     icon = "circle-check";
@@ -3503,7 +3517,7 @@ function renderOpportunityActionPanel(opp, contract, payment, permissions) {
     <button class="button secondary" data-open-opportunity-follow="${opp.id}" data-follow-action="client_revision">Registrar revisao</button>
     <button class="button danger" data-open-opportunity-follow="${opp.id}" data-follow-action="client_declined">Cliente recusou</button>
   ` : "";
-  const managerActions = canManage ? `
+  const managerActions = canManage && !isArchivedOpportunity(opp) ? `
     ${contract?.status === "sent" ? `<button class="button" data-sign-contract="${contract.id}">Confirmar assinatura</button>` : ""}
     ${payment && payment.status !== "confirmed" ? `<button class="button" data-confirm-payment="${payment.id}">Confirmar pagamento inicial</button>` : ""}
     ${contract?.status === "signed" && payment?.status === "confirmed" && !contract.saleValidatedAt ? `<button class="button success" data-validate-sale="${contract.id}">Validar venda</button>` : ""}
@@ -3610,17 +3624,13 @@ function approvalActionConfig(action) {
     },
     rejected: {
       title: "Recusar oportunidade",
-      description: "Informe o motivo da recusa e como a oportunidade deve seguir.",
-      button: "Confirmar recusa",
+      description: "Esta decisao e definitiva. Ao confirmar, a oportunidade sera arquivada e bloqueada para gestores e SDRs.",
+      button: "Recusar e arquivar",
       requiresReason: true,
       requiresAmount: false,
       reasonLabel: "Justificativa da recusa",
       defaultReason: "Fora da politica comercial atual.",
-      followOptions: [
-        "Arquivar oportunidade",
-        "Retornar para nutricao futura",
-        "Registrar perda e encerrar",
-      ],
+      followOptions: [],
     },
   };
   return configs[action] || configs.approved;
@@ -3647,13 +3657,17 @@ function renderApprovalFollowActionMenu(opp, action) {
             <input name="amount" data-money-input inputmode="decimal" value="${moneyInputValue(suggestedNetAmountCents)}" required />
           </label>
         ` : ""}
-        <label class="field ${config.requiresAmount ? "" : "full"}">
-          <span>Follow action</span>
-          <select name="followAction" required>
-            ${config.followOptions.map((option) => `<option value="${esc(option)}">${esc(option)}</option>`).join("")}
-          </select>
-        </label>
-        ${renderDateField("Data da proxima acao", "nextActionDate", addDays(action === "needs_information" ? 2 : 1))}
+        ${action === "rejected" ? `
+          <div class="terminal-rejection-note full">${renderIcon("lock-keyhole")} A oportunidade sairá da operação ativa e ficará disponível somente para consulta em Oportunidades arquivadas.</div>
+        ` : `
+          <label class="field ${config.requiresAmount ? "" : "full"}">
+            <span>Follow action</span>
+            <select name="followAction" required>
+              ${config.followOptions.map((option) => `<option value="${esc(option)}">${esc(option)}</option>`).join("")}
+            </select>
+          </label>
+          ${renderDateField("Data da proxima acao", "nextActionDate", addDays(action === "needs_information" ? 2 : 1))}
+        `}
         <label class="field full">
           <span>${esc(config.reasonLabel)}${config.requiresReason ? " *" : ""}</span>
           <textarea name="reason" ${config.requiresReason ? "required" : ""}>${esc(config.defaultReason)}</textarea>
@@ -5189,6 +5203,8 @@ function mutateOpportunity(id, status, label, actionName, meta = {}) {
 async function updateOpportunityDetails(id, form, requestApproval = false) {
   const opp = byId(state.opportunities, id);
   if (!opp) return toast("Oportunidade nao encontrada.");
+  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada nao pode ser alterada.");
+  if (isArchivedOpportunity(opp)) return toast("Restaure a oportunidade antes de altera-la.");
   const canUpdate = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && opp.sdrId === currentUser.id);
   if (!canUpdate) return toast("Voce nao pode editar esta oportunidade.");
   opp.clientName = form.get("clientName");
@@ -5251,6 +5267,8 @@ async function updateOpportunityDetails(id, form, requestApproval = false) {
 function updateOpportunityCrmStatus(id, crmStatus) {
   const opp = byId(state.opportunities, id);
   if (!opp) return toast("Oportunidade nao encontrada.");
+  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada nao pode ser alterada.");
+  if (isArchivedOpportunity(opp)) return toast("Restaure a oportunidade antes de altera-la.");
   const canUpdate = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && opp.sdrId === currentUser.id);
   if (!canUpdate) return toast("Voce nao pode alterar esta oportunidade.");
   if (!crmStatusLabels[crmStatus] || opp.crmStatus === crmStatus) return;
@@ -5268,6 +5286,8 @@ function updateOpportunityCrmStatus(id, crmStatus) {
 function updateOpportunityProgress(id, row) {
   const opp = byId(state.opportunities, id);
   if (!opp || !row) return toast("Oportunidade nao encontrada.");
+  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada nao pode ser alterada.");
+  if (isArchivedOpportunity(opp)) return toast("Restaure a oportunidade antes de altera-la.");
   const canUpdate = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && opp.sdrId === currentUser.id);
   if (!canUpdate) return toast("Voce nao pode alterar esta oportunidade.");
 
@@ -5323,6 +5343,7 @@ function duplicateOpportunity(id) {
 function archiveOpportunity(id) {
   const opp = byId(state.opportunities, id);
   if (!opp) return toast("Oportunidade não encontrada.");
+  if (isTerminallyRejected(opp)) return toast("A oportunidade recusada ja esta arquivada definitivamente.");
   if (!confirm(`Arquivar a oportunidade ${opp.clientName}?`)) return;
   opp.archivedFromStatus = opp.status === "cancelled" ? (opp.archivedFromStatus || "draft") : opp.status;
   opp.status = "cancelled";
@@ -5339,7 +5360,8 @@ function archiveOpportunity(id) {
 
 function restoreOpportunity(id) {
   const opp = byId(state.opportunities, id);
-  if (!opp || opp.status !== "cancelled") return toast("Oportunidade arquivada nao encontrada.");
+  if (!opp || !isArchivedOpportunity(opp)) return toast("Oportunidade arquivada nao encontrada.");
+  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada pelo gestor nao pode ser restaurada.");
   const canRestore = currentUser.role === "admin_manager" || opp.sdrId === currentUser.id;
   if (!canRestore) return toast("Voce nao pode restaurar esta oportunidade.");
   opp.status = opp.archivedFromStatus && opp.archivedFromStatus !== "cancelled" ? opp.archivedFromStatus : "draft";
@@ -5395,6 +5417,8 @@ async function openNotification(id) {
 
 async function submitOpportunity(id) {
   let current = byId(state.opportunities, id);
+  if (isTerminallyRejected(current)) return toast("Uma oportunidade recusada nao pode voltar para aprovacao.");
+  if (isArchivedOpportunity(current)) return toast("Restaure a oportunidade antes de pedir aprovacao.");
   const canSubmit = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && current?.sdrId === currentUser.id);
   if (!canSubmit) return toast("Apenas o gestor ou a SDR responsavel pode enviar a condicao para aprovacao.");
   if (!canRequestConditionApproval(current)) return toast("Esta oportunidade nao pode ser enviada para aprovacao neste status.");
@@ -5575,6 +5599,8 @@ async function rejectOpportunity(id, payload = {}) {
   const reason = payload.reason || "";
   if (!reason) return toast("A justificativa e obrigatoria.");
   const opp = byId(state.opportunities, id);
+  if (!opp) return toast("Oportunidade nao encontrada.");
+  if (isTerminallyRejected(opp)) return toast("Esta oportunidade ja foi recusada e arquivada.");
   if (supabaseSyncReady) {
     try {
       await postWorkflow({
@@ -5585,11 +5611,9 @@ async function rejectOpportunity(id, payload = {}) {
         expectedVersion: Number(opp?._version || 1),
       });
       await initSupabaseSync();
-      const refreshed = byId(state.opportunities, id);
-      applyFollowAction(refreshed, payload);
-      refreshed?.timeline?.unshift(event("approval_rejected", `Oportunidade recusada: ${reason}`, currentUser.id));
-      await saveState();
-      toast("Oportunidade recusada.");
+      drawer = null;
+      currentRoute = "archived";
+      toast("Oportunidade recusada, arquivada e bloqueada.");
       render();
       return;
     } catch (error) {
@@ -5598,11 +5622,19 @@ async function rejectOpportunity(id, payload = {}) {
       return;
     }
   }
-  applyFollowAction(opp, payload);
-  mutateOpportunity(id, "rejected", `Oportunidade recusada: ${reason}`, "approval_rejected", { reason });
+  const rejected = mutateOpportunity(id, "rejected", `Oportunidade recusada: ${reason}`, "approval_rejected", { reason });
+  rejected.archivedFromStatus = "rejected";
+  rejected.archivedAt = nowIso();
+  rejected.terminalRejection = true;
+  rejected.rejectionReason = reason;
+  rejected.nextAction = "";
+  rejected.nextActionDate = "";
+  rejected.notes = reason;
   addNotification(`A condição de ${opp.clientName} foi recusada pelo gestor.`, { recipientUserId: opp.sdrId });
   saveState();
-  toast("Oportunidade recusada.");
+  drawer = null;
+  currentRoute = "archived";
+  toast("Oportunidade recusada, arquivada e bloqueada.");
   render();
 }
 

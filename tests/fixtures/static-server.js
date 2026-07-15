@@ -131,6 +131,14 @@ const server = http.createServer(async (request, response) => {
       const opportunity = testState.opportunities.find((item) => item.id === body.opportunityId);
       if (opportunity) {
         opportunity.status = body.reviewAction === "approved" || body.reviewAction === "approved_with_changes" ? "commercial_condition_approved" : body.reviewAction;
+        if (body.reviewAction === "rejected") {
+          opportunity.archivedAt = new Date().toISOString();
+          opportunity.archivedFromStatus = "rejected";
+          opportunity.terminalRejection = true;
+          opportunity.rejectionReason = body.reason || "Condicao recusada pelo gestor.";
+          opportunity.nextAction = "";
+          opportunity.nextActionDate = "";
+        }
         opportunity._version = Number(opportunity._version || 1) + 1;
       }
     }
