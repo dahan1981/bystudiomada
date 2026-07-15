@@ -193,6 +193,7 @@ const statusLabels = {
   batched: "Em lote",
   paid: "Pago",
   active: "Ativo",
+  planning: "Planejamento",
   completed: "Concluido",
   not_started: "Não iniciado",
   awaiting_client: "Aguardando cliente",
@@ -202,6 +203,7 @@ const statusLabels = {
   locked: "Bloqueado",
   ready: "Pronto",
   in_progress: "Em andamento",
+  review: "Em revisao",
   awaiting_manager: "Aguardando gestor",
   skipped: "Pulado",
 };
@@ -271,6 +273,21 @@ const currentMomentOptions = [
   "Manutenção de presença",
 ];
 
+const nextActionOptions = [
+  "Fazer primeiro contato",
+  "Fazer follow-up",
+  "Aguardar resposta do cliente",
+  "Agendar reuniao",
+  "Realizar reuniao com gestores",
+  "Preparar proposta",
+  "Enviar proposta",
+  "Negociar condicoes",
+  "Cobrar assinatura do contrato",
+  "Confirmar pagamento",
+  "Retomar nutricao",
+  "Encerrar oportunidade",
+];
+
 const statusClasses = {
   draft: "draft",
   pending_approval: "pending",
@@ -298,6 +315,7 @@ const statusClasses = {
   batched: "info",
   paid: "paid",
   active: "active",
+  planning: "pending",
   completed: "completed",
   not_started: "draft",
   awaiting_client: "awaiting",
@@ -307,6 +325,7 @@ const statusClasses = {
   locked: "pending",
   ready: "ready",
   in_progress: "info",
+  review: "awaiting",
   awaiting_manager: "awaiting",
   skipped: "draft",
 };
@@ -817,6 +836,10 @@ function selectOptions(options, selectedValue = "", placeholder = "Selecione") {
   `;
 }
 
+function nextActionSelectOptions(selectedValue = "") {
+  return selectOptions(nextActionOptions, selectedValue, "Selecione a proxima acao");
+}
+
 function multiSelectOptions(options, selectedValue = "") {
   const selected = splitChoiceValue(selectedValue);
   const selectedSet = new Set(selected);
@@ -886,16 +909,24 @@ function addAudit(action, entityType, entityId, metadata = {}) {
   state.auditLogs.unshift(audit(currentUser?.id || "system", action, entityType, entityId, metadata));
 }
 
-function addNotification(text, { recipientUserId = null, recipientRole = null } = {}) {
-  state.notifications.unshift({
+function addNotification(text, { recipientUserId = null, recipientRole = null, title = "Atualizacao", kind = "info", entityType = null, entityId = null } = {}) {
+  const roleRecipients = recipientRole
+    ? state.users.filter((user) => user.role === recipientRole && user.active !== false).map((user) => user.id)
+    : [];
+  const recipients = recipientUserId ? [recipientUserId] : roleRecipients.length ? roleRecipients : [null];
+  recipients.forEach((targetUserId) => state.notifications.unshift({
     id: uid("ntf"),
+    title,
+    kind,
     text,
     read: false,
-    recipientUserId,
-    recipientRole,
+    recipientUserId: targetUserId,
+    recipientRole: targetUserId ? null : recipientRole,
+    entityType,
+    entityId,
     createdBy: currentUser?.id || "system",
     createdAt: nowIso(),
-  });
+  }));
 }
 
 function conditionToContractDraft(opp, condition, actorId, sequence = state.contracts.length + 1) {
@@ -956,7 +987,20 @@ function visibleOpportunities() {
 }
 
 function operationalOpportunities() {
-  return visibleOpportunities().filter((item) => item.status !== "cancelled");
+  return visibleOpportunities().filter((item) => item.status !== "cancelled" && !item.manualProjectOnly);
+}
+
+function archivedOpportunities() {
+  return visibleOpportunities().filter((item) => item.status === "cancelled" && !item.manualProjectOnly);
+}
+
+function visibleNotifications() {
+  if (!currentUser) return [];
+  return state.notifications.filter((item) => (
+    item.recipientUserId === currentUser.id
+    || (!item.recipientUserId && item.recipientRole === currentUser.role)
+    || item.createdBy === currentUser.id
+  ));
 }
 
 function activeCondition(opportunityId) {
@@ -1095,10 +1139,8 @@ function paymentPlanOptions(selectedValue = "") {
 }
 
 const projectStatusOptions = [
-  ["not_started", "Não iniciado"],
+  ["planning", "Planejamento"],
   ["active", "Ativo"],
-  ["awaiting_client", "Aguardando cliente"],
-  ["blocked", "Bloqueado"],
   ["on_hold", "Em pausa"],
   ["completed", "Concluido"],
   ["cancelled", "Cancelado"],
@@ -1108,9 +1150,7 @@ const stageStatusOptions = [
   ["locked", "Bloqueado"],
   ["ready", "Pronto"],
   ["in_progress", "Em andamento"],
-  ["awaiting_client", "Aguardando cliente"],
-  ["awaiting_manager", "Aguardando gestor"],
-  ["blocked", "Travado"],
+  ["review", "Em revisao"],
   ["approved", "Aprovado"],
   ["completed", "Concluido"],
   ["skipped", "Pulado"],
@@ -1130,7 +1170,8 @@ const metricIconAliases = {
 };
 
 function routeLabel(route) {
-  return navItems.find(([itemRoute]) => itemRoute === route)?.[1] || "Dashboard";
+  const secondaryLabels = { archived: "Oportunidades arquivadas", notifications: "Notificacoes" };
+  return navItems.find(([itemRoute]) => itemRoute === route)?.[1] || secondaryLabels[route] || "Dashboard";
 }
 
 function metricIconName(icon) {
@@ -1193,11 +1234,11 @@ function render() {
         <div class="topbar-actions">
           <span class="topbar-sync ${supabaseSyncReady ? "is-online" : ""}" title="${esc(supabaseSyncStatus)}"><i></i><span>${supabaseSyncStatus === "Salvando alterações" ? "Salvando" : "Dados salvos"}</span></span>
           <button class="button topbar-create" type="button" data-new-opportunity aria-label="Nova oportunidade">${renderIcon("plus")}<span>Nova oportunidade</span></button>
-          <button class="notification icon-button" type="button" data-route="settings" aria-label="Notificacoes">
+          <button class="notification icon-button" type="button" data-route="notifications" aria-label="Notificacoes">
             ${renderIcon("bell")}
-            <span>${state.notifications.filter((item) => !item.read).length}</span>
+            <span>${visibleNotifications().filter((item) => !item.read).length}</span>
           </button>
-          <span class="topbar-avatar" title="${esc(currentUser.name)}">${esc(initials(currentUser.name))}</span>
+          <button class="topbar-avatar" type="button" data-route="settings" title="Abrir meu perfil" aria-label="Abrir meu perfil">${esc(initials(currentUser.name))}</button>
         </div>
       </header>
       <section class="content">${renderRoute()}</section>
@@ -1299,7 +1340,7 @@ function renderAuth() {
 
 function renderSidebar() {
   const allowed = currentUser.role === "sdr"
-    ? navItems.filter(([route]) => !["approvals", "services", "reports", "audit", "settings"].includes(route))
+    ? navItems.filter(([route]) => !["approvals", "services", "reports", "audit"].includes(route))
     : navItems;
   const groups = [
     ["Comercial", ["dashboard", "opportunities", "progress", "approvals", "contracts"]],
@@ -1342,10 +1383,10 @@ function renderSidebar() {
             </select>
           </label>
         ` : ""}
-        <div class="user-summary">
+        <button class="user-summary user-summary-button" type="button" data-route="settings" aria-label="Abrir meu perfil">
           <span class="user-avatar">${esc(initials(currentUser.name))}</span>
           <div><strong>${esc(currentUser.name)}</strong><span>${roleLabels[currentUser.role]}</span></div>
-        </div>
+        </button>
         <button class="logout" type="button" data-logout>${renderIcon("log-out")}<span>Sair</span></button>
       </div>
     </aside>
@@ -1354,7 +1395,7 @@ function renderSidebar() {
 
 function renderCommandMenu() {
   const allowedRoutes = currentUser.role === "sdr"
-    ? navItems.filter(([route]) => !["approvals", "services", "reports", "audit", "settings"].includes(route))
+    ? navItems.filter(([route]) => !["approvals", "services", "reports", "audit"].includes(route))
     : navItems;
   return `
     <div class="command-backdrop" data-close-command>
@@ -1391,6 +1432,8 @@ function renderRoute() {
     dashboard: renderDashboard,
     approvals: renderApprovals,
     opportunities: renderOpportunities,
+    archived: renderArchivedOpportunities,
+    notifications: renderNotifications,
     progress: renderOpportunityProgress,
     contracts: renderContractsPipeline,
     payments: renderPayments,
@@ -1619,7 +1662,8 @@ function renderOpportunities() {
   return `
     ${pageHead(
       "Oportunidades",
-      currentUser.role === "admin_manager" ? "Todas as oportunidades" : "Suas oportunidades"
+      currentUser.role === "admin_manager" ? "Todas as oportunidades" : "Suas oportunidades",
+      `<button class="button secondary" type="button" data-route="archived">${renderIcon("archive")} Arquivadas (${archivedOpportunities().length})</button>`
     )}
     <div class="toolbar opportunity-toolbar">
       <label class="toolbar-search">${renderIcon("search")}<input class="search" type="search" data-search placeholder="Buscar por cliente ou marca..." /></label>
@@ -1638,6 +1682,70 @@ function renderOpportunities() {
     </div>
     <div class="table-meta"><span><strong>${items.length}</strong> oportunidade(s)</span><span>${renderIcon("sliders-horizontal")} Filtros combinados</span></div>
     <div data-opportunity-table>${opportunityTable(items)}</div>
+  `;
+}
+
+function renderArchivedOpportunities() {
+  const items = archivedOpportunities();
+  return `
+    ${pageHead(
+      "Oportunidades arquivadas",
+      "Registros fora da operacao ativa, preservados com historico completo",
+      `<button class="button secondary" type="button" data-route="opportunities">${renderIcon("arrow-left")} Voltar para ativas</button>`
+    )}
+    ${items.length ? `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Cliente</th><th>Marca</th><th>Servicos</th><th>SDR</th><th>Status anterior</th><th>Arquivada em</th><th></th></tr></thead>
+          <tbody>
+            ${items.map((item) => `
+              <tr>
+                <td><strong>${esc(item.clientName)}</strong></td>
+                <td>${esc(item.brandName || "-")}</td>
+                <td>${esc(serviceNamesForOpportunity(item))}</td>
+                <td>${esc(getActorName(item.sdrId))}</td>
+                <td>${statusBadge(item.archivedFromStatus || "draft")}</td>
+                <td>${dateLabel(item.archivedAt || item.updatedAt)}</td>
+                <td class="row-actions">
+                  <button class="button secondary" type="button" data-open-opportunity="${item.id}">Ver historico</button>
+                  <button class="button" type="button" data-restore-opportunity="${item.id}">${renderIcon("archive-restore")} Restaurar</button>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      </div>
+    ` : `<section class="card">${empty("Nenhuma oportunidade arquivada", "archive", "As oportunidades arquivadas permanecerao disponiveis aqui para consulta e restauracao.")}</section>`}
+  `;
+}
+
+function renderNotifications() {
+  const items = visibleNotifications();
+  const unread = items.filter((item) => !item.read).length;
+  return `
+    ${pageHead(
+      "Notificacoes",
+      `${unread} nao lida(s) de ${items.length} notificacao(oes)`,
+      unread ? `<button class="button secondary" type="button" data-mark-notifications>${renderIcon("check-check")} Marcar todas como lidas</button>` : ""
+    )}
+    ${items.length ? `
+      <section class="notification-list" aria-label="Central de notificacoes">
+        ${items.map((item) => `
+          <article class="notification-row ${item.read ? "is-read" : "is-unread"}">
+            <span class="notification-kind">${renderIcon(item.kind === "approval" ? "badge-check" : "bell")}</span>
+            <div class="notification-copy">
+              <div><strong>${esc(item.title || "Atualizacao")}</strong>${item.read ? "" : `<span class="notification-new">Nova</span>`}</div>
+              <p>${esc(item.text || item.message || "Atualizacao no portal")}</p>
+              <small>${dateLabel(item.createdAt)}</small>
+            </div>
+            <div class="notification-actions">
+              ${item.entityId ? `<button class="button secondary compact-button" type="button" data-open-notification="${item.id}">Abrir</button>` : ""}
+              ${item.read ? "" : `<button class="icon-button" type="button" data-read-notification="${item.id}" aria-label="Marcar como lida">${renderIcon("check")}</button>`}
+            </div>
+          </article>
+        `).join("")}
+      </section>
+    ` : `<section class="card">${empty("Nenhuma notificacao", "bell", "Aprovacoes, contratos, pagamentos e atualizacoes destinadas a voce aparecerao aqui.")}</section>`}
   `;
 }
 
@@ -1677,7 +1785,7 @@ function renderOpportunityProgress() {
                     ${Object.entries(crmStatusLabels).map(([key, label]) => `<option value="${key}" ${(item.crmStatus || "lead_mapped") === key ? "selected" : ""}>${label}</option>`).join("")}
                   </select>
                 </td>
-                <td><input data-progress-next-action value="${esc(item.nextAction || "")}" placeholder="Próxima ação" /></td>
+                <td><select class="table-select next-action-select" data-progress-next-action>${nextActionSelectOptions(item.nextAction)}</select></td>
                 <td><input data-progress-next-date type="date" value="${esc(item.nextActionDate || "")}" /></td>
                 <td><textarea data-progress-notes rows="2" placeholder="Observações">${esc(item.notes || "")}</textarea></td>
                 <td class="row-actions">
@@ -1835,7 +1943,8 @@ function renderPayments() {
       "Pagamentos",
       currentUser.role === "admin_manager"
         ? "Registros informativos dos recebimentos externos vinculados a cada contrato"
-        : "Registros informativos dos pagamentos externos dos seus contratos"
+        : "Registros informativos dos pagamentos externos dos seus contratos",
+      currentUser.role === "admin_manager" && contracts.length ? `<button class="button" type="button" data-new-payment>${renderIcon("plus")} Novo registro</button>` : ""
     )}
     <section class="card notice-card">
       <strong>Registro apenas informativo</strong>
@@ -1880,7 +1989,7 @@ function renderPayments() {
       <h3 style="margin-top:28px">Historico de pagamentos</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Contrato</th><th>Tipo</th><th>Valor</th><th>Método</th><th>Referência</th><th>Status</th><th>Data</th><th>Observação</th><th></th></tr></thead>
+          <thead><tr><th>Contrato</th><th>Tipo</th><th>Valor</th><th>Metodo</th><th>Pagador / referencia</th><th>Comprovante</th><th>Status</th><th>Data</th><th>Observacao</th><th></th></tr></thead>
           <tbody>
             ${rows.map((item) => {
               const contract = byId(state.contracts, item.contractId);
@@ -1890,12 +1999,13 @@ function renderPayments() {
                   <td>${esc(paymentTypeLabel(item.type))}</td>
                   <td>${brl(item.amountCents)}</td>
                   <td>${esc(item.method || "-")}</td>
-                  <td>${esc(item.reference || "-")}</td>
+                  <td>${esc([item.payerName, item.receiptNumber, item.reference].filter(Boolean).join(" · ") || "-")}</td>
                   <td>${item.receiptFileName ? attachmentLink(item.receiptAttachmentId, item.receiptFileName) : "-"}</td>
                   <td>${statusBadge(item.status)}</td>
                   <td>${dateLabel(item.paidAt || item.dueDate || item.createdAt)}</td>
                   <td>${esc(item.notes || "-")}</td>
                   <td class="row-actions">
+                    ${currentUser.role === "admin_manager" ? `<button class="button secondary" data-edit-payment="${item.id}">Editar</button>` : ""}
                     ${item.status !== "confirmed" && currentUser.role === "admin_manager" ? `<button class="button" data-confirm-payment="${item.id}">Confirmar</button>` : ""}
                   </td>
                 </tr>
@@ -2196,7 +2306,11 @@ function renderProjectsManagement() {
     });
 
   return `
-    ${pageHead("Projetos", "Gestao de tarefas dos projetos em tabela")}
+    ${pageHead(
+      "Projetos",
+      "Gestao de tarefas dos projetos em tabela",
+      currentUser.role === "admin_manager" ? `<button class="button" type="button" data-new-project>${renderIcon("plus")} Adicionar projeto</button>` : ""
+    )}
     ${items.length ? `
       <div class="table-wrap">
         <table>
@@ -2577,7 +2691,15 @@ function renderAudit() {
 function renderSettings() {
   return `
     ${pageHead("Configurações", "Contas, segurança e sincronização do portal")}
+    <section class="card profile-card">
+      <div class="profile-card-main">
+        <span class="profile-avatar">${esc(initials(currentUser.name))}</span>
+        <div><span class="section-title">Meu perfil</span><h3>${esc(currentUser.name)}</h3><p>${esc(currentUser.email)} · ${esc(roleLabels[currentUser.role])}</p></div>
+      </div>
+      <div class="profile-meta"><span>Ambiente</span><strong>${currentUser.workspaceKind === "training" ? "Treinamento" : "Operacao"}</strong></div>
+    </section>
     <div class="settings-layout">
+      ${currentUser.role === "admin_manager" ? `
       <section class="card team-card">
         <div class="section-head"><div><h3>Equipe e acessos</h3><p>Crie uma conta individual para cada SDR.</p></div><span class="settings-count">${state.users.length} conta(s)</span></div>
         <div class="team-list">
@@ -2601,8 +2723,15 @@ function renderSettings() {
           `).join("")}
         </div>
       </section>
+      ` : `
+      <section class="card">
+        <div class="section-head"><div><h3>Acesso da SDR</h3><p>Seu perfil visualiza apenas oportunidades, contratos, projetos, pagamentos informativos, arquivos e comissoes atribuidos a voce.</p></div>${renderIcon("shield-check")}</div>
+        <div class="security-status is-secure"><strong>Acesso individual e protegido</strong></div>
+      </section>
+      `}
 
       <div class="settings-side">
+        ${currentUser.role === "admin_manager" ? `
         <section class="card">
           <div class="section-head"><div><h3>Nova conta SDR</h3><p>A SDR receberá acesso apenas às oportunidades atribuídas a ela.</p></div></div>
           <form class="form-grid settings-form" data-create-sdr-form>
@@ -2612,6 +2741,7 @@ function renderSettings() {
             <button class="button full" type="submit">${renderIcon("user-plus")} Enviar convite SDR</button>
           </form>
         </section>
+        ` : ""}
 
         <section class="card">
           <div class="section-head"><div><h3>Alterar minha senha</h3><p>Use uma senha exclusiva para o Portal Mada.</p></div></div>
@@ -2646,15 +2776,15 @@ function renderSettings() {
     <div class="grid cards-2 settings-bottom">
       <section class="card">
         <div class="section-head"><div><h3>Notificações</h3><p>Movimentações que exigem atenção.</p></div></div>
-        ${state.notifications.length ? `<div class="timeline">
-          ${state.notifications.map((item) => `
+        ${visibleNotifications().length ? `<div class="timeline">
+          ${visibleNotifications().slice(0, 5).map((item) => `
             <div class="timeline-item">
               <span class="timeline-dot"></span>
               <div><strong>${esc(item.text)}</strong><span>${item.read ? "Lida" : "Nova"}</span></div>
             </div>
           `).join("")}
         </div>` : empty("Nenhuma notificação", "◌", "As novas solicitações aparecerão aqui.")}
-        <div class="actions"><button class="button secondary" data-mark-notifications>Ler todas</button></div>
+        <div class="actions"><button class="button secondary" data-route="notifications">Abrir central</button></div>
       </section>
       <section class="card sync-card">
         <div class="section-head"><div><h3>Persistência</h3><p>Dados e anexos protegidos no ambiente da Mada.</p></div>${renderIcon("database")}</div>
@@ -2685,9 +2815,10 @@ function empty(text, icon, description = "", action = "") {
 
 function renderDrawer() {
   if (drawer.type === "newOpportunity") return renderNewOpportunityDrawer();
+  if (drawer.type === "newProject") return renderNewProjectDrawer();
   if (drawer.type === "opportunity") return renderOpportunityDrawer(drawer.id);
   if (drawer.type === "contract") return renderContractDrawer(drawer.id);
-  if (drawer.type === "paymentRecord") return renderPaymentRecordDrawer(drawer.contractId);
+  if (drawer.type === "paymentRecord") return renderPaymentRecordDrawer(drawer.contractId, drawer.paymentId, drawer.allowContractSwitch);
   if (drawer.type === "payoutPayment") return renderPayoutPaymentDrawer(drawer.id);
   if (drawer.type === "project") return renderProjectDrawer(drawer.id);
   if (drawer.type === "sdrCommissionDashboard") return renderSdrCommissionDrawer(drawer.id);
@@ -2759,6 +2890,45 @@ function renderNewOpportunityDrawer() {
   `;
 }
 
+function renderNewProjectDrawer() {
+  if (currentUser.role !== "admin_manager") return "";
+  return `
+    <div class="drawer-backdrop" data-close-drawer>
+      <aside class="drawer" role="dialog" aria-modal="true" aria-label="Adicionar projeto" data-drawer-panel>
+        <header class="drawer-head">
+          <div><h3>Adicionar projeto</h3><p>Crie um projeto manual mesmo quando ele nao nasceu de uma oportunidade comercial.</p></div>
+          <button class="icon-button" data-close-drawer type="button">x</button>
+        </header>
+        <form class="drawer-body" data-project-form>
+          <section class="card">
+            <p class="section-title">Identificacao</p>
+            <div class="form-grid">
+              <label class="field"><span>Cliente *</span><input name="clientName" required /></label>
+              <label class="field"><span>Empresa / marca</span><input name="brandName" /></label>
+              <label class="field full"><span>Nome do projeto *</span><input name="projectName" required placeholder="Ex. Reposicionamento de marca 2026" /></label>
+              <label class="field"><span>SDR responsavel</span><select name="sdrId">${opportunityResponsibleOptions(MANAGEMENT_OWNER_ID)}</select></label>
+              <label class="field"><span>Status inicial</span><select name="status">${projectStatusOptions.map(([value, label]) => `<option value="${value}" ${value === "planning" ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+              <label class="field"><span>Data de inicio</span><input name="startsAt" type="date" value="${nowIso().slice(0, 10)}" /></label>
+              <label class="field"><span>Prazo previsto</span><input name="targetEndAt" type="date" value="${addDays(60)}" /></label>
+              <label class="field full"><span>Modelo de etapas</span><select name="template"><option value="complete">Fluxo completo Mada</option><option value="simple">Fluxo simplificado</option></select></label>
+            </div>
+          </section>
+          <section class="card">
+            <fieldset class="field service-picker" data-service-picker>
+              <legend>Servicos do projeto *</legend>
+              <div class="service-picker-toolbar"><strong data-service-count>0 selecionado(s)</strong><button class="button ghost compact-button" type="button" data-clear-services>Limpar selecao</button></div>
+              <div class="check-grid service-check-grid">
+                ${state.services.map((item) => `<label class="check-card service-check-card"><input type="checkbox" name="serviceIds" value="${item.id}" data-service-option /><span>${esc(item.name)}</span>${renderIcon("check", "service-selected-icon")}</label>`).join("")}
+              </div>
+            </fieldset>
+          </section>
+          <div class="actions"><button class="button" type="submit">${renderIcon("plus")} Criar projeto</button><button class="button secondary" type="button" data-close-drawer>Cancelar</button></div>
+        </form>
+      </aside>
+    </div>
+  `;
+}
+
 function opportunityFormFields(opportunity = {}) {
   const selectedServiceIds = normalizeServiceIds(opportunity.serviceIds, opportunity.serviceId);
   return `
@@ -2817,18 +2987,23 @@ function opportunityFormFields(opportunity = {}) {
     <section class="card">
       <p class="section-title">Oportunidade</p>
       <div class="form-grid">
-        <div class="field full">
-          <span>Servicos possiveis</span>
-          <div class="check-grid">
+        <fieldset class="field full service-picker" data-service-picker>
+          <legend>Servicos possiveis</legend>
+          <div class="service-picker-toolbar">
+            <strong data-service-count>${selectedServiceIds.length} selecionado(s)</strong>
+            <button class="button ghost compact-button" type="button" data-clear-services>Limpar selecao</button>
+          </div>
+          <div class="check-grid service-check-grid">
             ${state.services.map((item) => `
-              <label class="check-card">
-                <input type="checkbox" name="serviceIds" value="${item.id}" ${selectedServiceIds.includes(item.id) ? "checked" : ""} />
+              <label class="check-card service-check-card ${selectedServiceIds.includes(item.id) ? "is-selected" : ""}">
+                <input type="checkbox" name="serviceIds" value="${item.id}" data-service-option ${selectedServiceIds.includes(item.id) ? "checked" : ""} />
                 <span>${esc(item.name)}</span>
+                ${renderIcon("check", "service-selected-icon")}
               </label>
             `).join("")}
           </div>
           <small>Marque uma ou mais opcoes quando a oportunidade for combo.</small>
-        </div>
+        </fieldset>
         <label class="field full"><span>Problema observado</span><textarea name="observedProblem">${esc(opportunity.observedProblem)}</textarea></label>
         <label class="field full"><span>Necessidade relatada</span><textarea name="reportedNeed">${esc(opportunity.reportedNeed || opportunity.clientNeed)}</textarea></label>
         <label class="field full"><span>Escopo solicitado</span><textarea name="requestedScope">${esc(opportunity.requestedScope)}</textarea></label>
@@ -3331,13 +3506,21 @@ function renderContractDrawer(id) {
   });
 }
 
-function renderPaymentRecordDrawer(contractId) {
+function renderPaymentRecordDrawer(contractId, paymentId = null, allowContractSwitch = false) {
+  const payment = paymentId ? byId(state.payments, paymentId) : null;
+  contractId = payment?.contractId || contractId || visibleContracts()[0]?.id;
   const contract = byId(state.contracts, contractId);
   if (!contract) return "";
   const opp = byId(state.opportunities, contract.opportunityId);
   const summary = contractPaymentSummary(contractId);
-  const suggested = Math.max(0, contract.amountCents - summary.confirmedCents) || contract.amountCents;
+  const suggested = payment?.amountCents || Math.max(0, contract.amountCents - summary.confirmedCents) || contract.amountCents;
+  const contractPicker = allowContractSwitch ? `
+    <section class="card"><label class="field"><span>Contrato do pagamento</span><select data-payment-contract-choice>${visibleContracts().map((item) => {
+      const opportunity = byId(state.opportunities, item.opportunityId);
+      return `<option value="${item.id}" ${item.id === contract.id ? "selected" : ""}>${esc(item.contractNumber)} - ${esc(opportunity?.clientName || "Cliente")}</option>`;
+    }).join("")}</select></label></section>` : "";
   const side = `
+    ${contractPicker}
     <section class="card">
       <p class="section-title">Contexto do contrato</p>
       <div class="detail-list">
@@ -3350,82 +3533,29 @@ function renderPaymentRecordDrawer(contractId) {
         <div class="detail-row"><span>A confirmar</span><strong>${brl(summary.pendingCents)}</strong></div>
       </div>
     </section>
-    <section class="card notice-card">
-      <strong>Nao e uma cobranca</strong>
-      <p>Este formulario apenas registra informacoes de pagamentos recebidos fora da plataforma. Nenhum dinheiro, Pix, boleto ou cartao passa pelo portal.</p>
-    </section>
+    <section class="card notice-card"><strong>Nao e uma cobranca</strong><p>Este formulario apenas registra pagamentos recebidos fora da plataforma.</p></section>
   `;
   const main = `
     <section class="card">
-      <div class="section-head">
-        <div>
-          <h3>Registrar pagamento externo</h3>
-          <p>Use para documentar valor, data, metodo, referencia e comprovante recebido do contratante.</p>
-        </div>
-      </div>
+      <div class="section-head"><div><h3>${payment ? "Editar pagamento externo" : "Registrar pagamento externo"}</h3><p>Documente valor, data, metodo, pagador, referencia e comprovante.</p></div></div>
       <form class="form-grid" data-payment-record-form="${contract.id}">
-        <label class="field">
-          <span>Valor registrado</span>
-          <input name="amount" data-money-input inputmode="decimal" required value="${moneyInputValue(suggested)}" />
-        </label>
-        <label class="field">
-          <span>Status do registro</span>
-          <select name="status">
-            <option value="confirmed">Confirmado / conferido</option>
-            <option value="pending">Registrado, aguardando conferencia</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Tipo</span>
-          <select name="type">
-            <option value="contract_payment">Pagamento do contrato</option>
-            <option value="initial">Entrada</option>
-            <option value="installment">Parcela</option>
-            <option value="remaining">Saldo restante</option>
-            <option value="adjustment">Ajuste</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Metodo externo</span>
-          <select name="method">
-            <option>Pix</option>
-            <option>Transferencia</option>
-            <option>Boleto</option>
-            <option>Cartao externo</option>
-            <option>Dinheiro</option>
-            <option>Outro</option>
-          </select>
-        </label>
-        <label class="field">
-          <span>Data do pagamento</span>
-          <input name="paidAt" type="date" value="${nowIso().slice(0, 10)}" />
-        </label>
-        <label class="field">
-          <span>Vencimento / referencia</span>
-          <input name="dueDate" type="date" value="${nowIso().slice(0, 10)}" />
-        </label>
-        <label class="field full">
-          <span>Referencia externa</span>
-          <input name="reference" placeholder="Ex. ID Pix, banco, número do comprovante, nome do pagador" />
-        </label>
-        <label class="field full">
-          <span>Comprovante ou arquivo recebido</span>
-          <input name="receiptFile" type="file" />
-          <small>Anexe o comprovante recebido para manter o registro baixável no portal.</small>
-        </label>
-        <label class="field full">
-          <span>Observações internas</span>
-          <textarea name="notes" placeholder="Detalhe quem enviou, onde foi recebido e qualquer informação útil para contrato, comissão e relatórios."></textarea>
-        </label>
-        <div class="actions full">
-          <button class="button" type="submit">Salvar registro de pagamento</button>
-          <button class="button secondary" type="button" data-open-contract="${contract.id}">Voltar ao contrato</button>
-        </div>
+        <input name="paymentId" type="hidden" value="${esc(payment?.id || "")}" />
+        <label class="field"><span>Valor registrado</span><input name="amount" data-money-input inputmode="decimal" required value="${moneyInputValue(suggested)}" /></label>
+        <label class="field"><span>Status do registro</span><select name="status"><option value="confirmed" ${!payment || payment.status === "confirmed" ? "selected" : ""}>Confirmado / conferido</option><option value="pending" ${payment?.status === "pending" ? "selected" : ""}>Aguardando conferencia</option></select></label>
+        <label class="field"><span>Tipo</span><select name="type">${[["contract_payment", "Pagamento do contrato"], ["initial", "Entrada"], ["installment", "Parcela"], ["remaining", "Saldo restante"], ["adjustment", "Ajuste"]].map(([value, label]) => `<option value="${value}" ${(!payment && value === "contract_payment") || payment?.type === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
+        <label class="field"><span>Metodo externo</span><select name="method">${["Pix", "Transferencia", "Boleto", "Cartao externo", "Dinheiro", "Outro"].map((method) => `<option value="${method}" ${payment?.method === method ? "selected" : ""}>${method}</option>`).join("")}</select></label>
+        <label class="field"><span>Data do pagamento</span><input name="paidAt" type="date" value="${String(payment?.paidAt || nowIso()).slice(0, 10)}" /></label>
+        <label class="field"><span>Vencimento</span><input name="dueDate" type="date" value="${String(payment?.dueDate || nowIso()).slice(0, 10)}" /></label>
+        <label class="field"><span>Nome do pagador</span><input name="payerName" value="${esc(payment?.payerName || "")}" placeholder="Pessoa ou empresa pagadora" /></label>
+        <label class="field"><span>Numero do recibo</span><input name="receiptNumber" value="${esc(payment?.receiptNumber || "")}" placeholder="Ex. REC-2026-001" /></label>
+        <label class="field full"><span>Referencia externa</span><input name="reference" value="${esc(payment?.reference || "")}" placeholder="ID Pix, banco ou identificador da transferencia" /></label>
+        <label class="field full"><span>Comprovante ou arquivo recebido</span><input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png" /><small>${payment?.receiptFileName ? `Arquivo atual: ${esc(payment.receiptFileName)}. Envie outro apenas para substituir.` : "PDF, JPG ou PNG de ate 10 MB."}</small></label>
+        <label class="field full"><span>Observacoes internas</span><textarea name="notes">${esc(payment?.notes || "")}</textarea></label>
+        <div class="actions full"><button class="button" type="submit">${payment ? "Atualizar registro" : "Salvar registro de pagamento"}</button><button class="button secondary" type="button" data-open-contract="${contract.id}">Voltar ao contrato</button></div>
       </form>
-    </section>
-  `;
+    </section>`;
   return renderWorkspaceShell({
-    title: `Pagamento - ${contract.contractNumber}`,
+    title: `${payment ? "Editar pagamento" : "Pagamento"} - ${contract.contractNumber}`,
     subtitle: `${esc(opp?.clientName || "Contrato")} - registro informativo`,
     label: "Registro de pagamento externo",
     main,
@@ -3919,6 +4049,14 @@ function bindApp() {
     });
   });
 
+  document.querySelectorAll("[data-new-project]").forEach((button) => {
+    button.addEventListener("click", () => {
+      drawer = { type: "newProject" };
+      commandMenuOpen = false;
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-open-opportunity]").forEach((button) => {
     button.addEventListener("click", () => {
       drawer = { type: "opportunity", id: button.dataset.openOpportunity };
@@ -3931,6 +4069,29 @@ function bindApp() {
       drawer = { type: "contract", id: button.dataset.openContract };
       render();
     });
+  });
+
+  document.querySelectorAll("[data-new-payment]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const contract = visibleContracts()[0];
+      if (!contract) return toast("Nenhum contrato disponivel para registrar pagamento.");
+      drawer = { type: "paymentRecord", contractId: contract.id, allowContractSwitch: true };
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-edit-payment]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const payment = byId(state.payments, button.dataset.editPayment);
+      if (!payment) return;
+      drawer = { type: "paymentRecord", contractId: payment.contractId, paymentId: payment.id };
+      render();
+    });
+  });
+
+  document.querySelector("[data-payment-contract-choice]")?.addEventListener("change", (event) => {
+    drawer = { type: "paymentRecord", contractId: event.currentTarget.value, allowContractSwitch: true };
+    render();
   });
 
   document.querySelectorAll("[data-open-project]").forEach((button) => {
@@ -4001,6 +4162,7 @@ function bindApp() {
 
 function bindForms() {
   setupValueInputs();
+  setupServicePickers();
 
   document.querySelector("[data-create-sdr-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -4043,24 +4205,57 @@ function bindForms() {
     }
   });
 
-  document.querySelector("[data-opportunity-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-opportunity-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const formElement = event.currentTarget;
+    const formData = new FormData(formElement);
     const intent = event.submitter?.value || "draft";
-    createOpportunity(new FormData(event.currentTarget), intent);
+    setFormBusy(formElement, true);
+    try {
+      await createOpportunity(formData, intent);
+    } finally {
+      setFormBusy(formElement, false);
+    }
   });
 
-  document.querySelector("[data-opportunity-edit-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-opportunity-edit-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    updateOpportunityDetails(
-      event.currentTarget.dataset.opportunityEditForm,
-      new FormData(event.currentTarget),
-      event.submitter?.value === "submit",
-    );
+    const formElement = event.currentTarget;
+    const formData = new FormData(formElement);
+    const opportunityId = formElement.dataset.opportunityEditForm;
+    const shouldSubmit = event.submitter?.value === "submit";
+    setFormBusy(formElement, true);
+    try {
+      await updateOpportunityDetails(opportunityId, formData, shouldSubmit);
+    } finally {
+      setFormBusy(formElement, false);
+    }
   });
 
-  document.querySelector("[data-approval-action-form]")?.addEventListener("submit", (event) => {
+  document.querySelector("[data-project-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
-    submitApprovalFollowAction(event.currentTarget.dataset.approvalActionForm, event.currentTarget);
+    const formElement = event.currentTarget;
+    const formData = new FormData(formElement);
+    setFormBusy(formElement, true);
+    try {
+      await createManualProject(formData);
+    } finally {
+      setFormBusy(formElement, false);
+    }
+  });
+
+  document.querySelector("[data-approval-action-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const formElement = event.currentTarget;
+    const formData = new FormData(formElement);
+    const approvalAction = formElement.dataset.approvalAction;
+    const opportunityId = formElement.dataset.approvalActionForm;
+    setFormBusy(formElement, true);
+    try {
+      await submitApprovalFollowAction(opportunityId, formData, approvalAction);
+    } finally {
+      setFormBusy(formElement, false);
+    }
   });
 
   document.querySelector("[data-opportunity-follow-form]")?.addEventListener("submit", (event) => {
@@ -4160,6 +4355,24 @@ function setupFileDelegationField() {
 
   visibility.addEventListener("change", sync);
   sync();
+}
+
+function setupServicePickers(root = document) {
+  root.querySelectorAll("[data-service-picker]").forEach((picker) => {
+    const options = [...picker.querySelectorAll("[data-service-option]")];
+    const count = picker.querySelector("[data-service-count]");
+    const sync = () => {
+      const selected = options.filter((option) => option.checked);
+      options.forEach((option) => option.closest(".service-check-card")?.classList.toggle("is-selected", option.checked));
+      if (count) count.textContent = `${selected.length} selecionado(s)`;
+    };
+    options.forEach((option) => option.addEventListener("change", sync));
+    picker.querySelector("[data-clear-services]")?.addEventListener("click", () => {
+      options.forEach((option) => option.checked = false);
+      sync();
+    });
+    sync();
+  });
 }
 
 function setupValueInputs(root = document) {
@@ -4264,14 +4477,13 @@ function bindActions() {
   action("[data-save-opportunity-progress]", (button) => updateOpportunityProgress(button.dataset.saveOpportunityProgress, button.closest("[data-progress-row]")));
   action("[data-duplicate-opportunity]", (button) => duplicateOpportunity(button.dataset.duplicateOpportunity));
   action("[data-archive-opportunity]", (button) => archiveOpportunity(button.dataset.archiveOpportunity));
+  action("[data-restore-opportunity]", (button) => restoreOpportunity(button.dataset.restoreOpportunity));
+  action("[data-read-notification]", (button) => markNotificationRead(button.dataset.readNotification));
+  action("[data-open-notification]", (button) => openNotification(button.dataset.openNotification));
   action("[data-save-commission]", (button) => updateCommission(button.dataset.saveCommission, button.closest("[data-commission-row]")));
   action("[data-pay-batch]", (button) => payBatch(button.dataset.payBatch));
   action("[data-export-csv]", (button) => exportCsv(button.dataset.exportCsv));
-  action("[data-mark-notifications]", () => {
-    state.notifications.forEach((item) => item.read = true);
-    saveState();
-    render();
-  });
+  action("[data-mark-notifications]", () => markAllNotificationsRead());
   action("[data-toggle-user-active]", (button) => togglePortalUser(button.dataset.toggleUserActive, button.dataset.active === "true"));
 }
 
@@ -4295,12 +4507,13 @@ async function postWorkflow(payload) {
 }
 
 function setFormBusy(form, busy) {
+  if (!form) return;
   form.querySelectorAll("button, input, select, textarea").forEach((control) => control.disabled = busy);
 }
 
 async function createSdrAccount(form) {
-  setFormBusy(form, true);
   const data = new FormData(form);
+  setFormBusy(form, true);
   try {
     await postPortal("/api/portal-users", {
       action: "invite",
@@ -4339,8 +4552,8 @@ async function togglePortalUser(userId, active) {
 }
 
 async function changeCurrentPassword(form) {
-  setFormBusy(form, true);
   const data = new FormData(form);
+  setFormBusy(form, true);
   try {
     await postPortal("/api/portal-auth", {
       action: "change_password",
@@ -4408,11 +4621,12 @@ function bindFilters() {
   amountMaxFilter?.addEventListener("change", update);
 }
 
-function createOpportunity(form, intent) {
+async function createOpportunity(form, intent) {
   if (intent === "submit" && currentUser.role !== "sdr") intent = "draft";
   const id = uid("opp");
-  const serviceIds = normalizeServiceIds(form.getAll("serviceIds"), state.services[0]?.id);
+  const serviceIds = normalizeServiceIds(form.getAll("serviceIds"));
   const suggestedAmountCents = cents(form.get("suggestedAmount"));
+  if (intent === "submit" && !serviceIds.length) return toast("Selecione pelo menos um servico antes de pedir aprovacao.");
   if (intent === "submit" && suggestedAmountCents <= 0) return toast("Informe o valor proposto antes de pedir aprovação.");
   const suggestedDiscountPercent = percent(form.get("suggestedDiscount"));
   const requestedPaymentPlan = normalizePaymentPlan(form.get("requestedConditions"));
@@ -4460,17 +4674,20 @@ function createOpportunity(form, intent) {
     nextActionDate: "",
     notes: "",
     crmStatus: "lead_mapped",
-    status: intent === "submit" ? "pending_approval" : "draft",
+    status: "draft",
     createdAt: nowIso(),
     updatedAt: nowIso(),
-    timeline: [event(intent === "submit" ? "opportunity_submitted" : "opportunity_created", intent === "submit" ? "Pedido de aprovacao da condicao enviado" : "Oportunidade salva no CRM", currentUser.id)],
+    timeline: [event("opportunity_created", "Oportunidade salva no CRM", currentUser.id)],
   };
   state.opportunities.unshift(opp);
-  addAudit(opp.status === "pending_approval" ? "opportunity_submitted" : "opportunity_created", "Opportunity", opp.id, {});
-  if (opp.status === "pending_approval") addNotification(`Nova solicitação enviada por ${getActorName(opp.sdrId)}.`, { recipientRole: "admin_manager" });
-  saveState();
+  addAudit("opportunity_created", "Opportunity", opp.id, {});
+  await saveState();
   drawer = { type: "opportunity", id };
-  toast(opp.status === "pending_approval" ? "Pedido de aprovacao enviado." : "Oportunidade salva no CRM.");
+  if (intent === "submit") {
+    await submitOpportunity(id);
+    return;
+  }
+  toast("Oportunidade salva no CRM.");
   render();
 }
 
@@ -4485,7 +4702,7 @@ function mutateOpportunity(id, status, label, actionName, meta = {}) {
   return opp;
 }
 
-function updateOpportunityDetails(id, form, requestApproval = false) {
+async function updateOpportunityDetails(id, form, requestApproval = false) {
   const opp = byId(state.opportunities, id);
   if (!opp) return toast("Oportunidade nao encontrada.");
   const canUpdate = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && opp.sdrId === currentUser.id);
@@ -4501,8 +4718,8 @@ function updateOpportunityDetails(id, form, requestApproval = false) {
   opp.origin = form.get("origin");
   opp.sdrId = responsibleIdFromForm(form);
   opp.documentNumber = form.get("documentNumber");
-  opp.serviceIds = normalizeServiceIds(form.getAll("serviceIds"), opp.serviceId);
-  opp.serviceId = opp.serviceIds[0] || opp.serviceId;
+  opp.serviceIds = normalizeServiceIds(form.getAll("serviceIds"));
+  opp.serviceId = opp.serviceIds[0] || "";
   opp.businessOffer = form.get("businessOffer");
   opp.targetAudience = form.get("targetAudience");
   opp.operationSignal = multiChoiceValue(form, "operationSignal");
@@ -4537,9 +4754,9 @@ function updateOpportunityDetails(id, form, requestApproval = false) {
   opp.updatedAt = nowIso();
   opp.timeline.unshift(event("opportunity_crm_updated", "Informacoes do CRM atualizadas", currentUser.id));
   addAudit("opportunity_crm_updated", "Opportunity", id, { crmStatus: opp.crmStatus });
-  saveState();
+  await saveState();
   if (requestApproval) {
-    submitOpportunity(id);
+    await submitOpportunity(id);
     return;
   }
   toast("Informacoes do CRM salvas.");
@@ -4623,23 +4840,84 @@ function archiveOpportunity(id) {
   const opp = byId(state.opportunities, id);
   if (!opp) return toast("Oportunidade não encontrada.");
   if (!confirm(`Arquivar a oportunidade ${opp.clientName}?`)) return;
+  opp.archivedFromStatus = opp.status === "cancelled" ? (opp.archivedFromStatus || "draft") : opp.status;
   opp.status = "cancelled";
+  opp.archivedAt = nowIso();
   opp.updatedAt = nowIso();
   opp.timeline.unshift(event("opportunity_archived", "Oportunidade arquivada", currentUser.id));
   addAudit("opportunity_archived", "Opportunity", id, {});
   saveState();
   toast("Oportunidade arquivada.");
+  drawer = null;
+  currentRoute = "opportunities";
+  render();
+}
+
+function restoreOpportunity(id) {
+  const opp = byId(state.opportunities, id);
+  if (!opp || opp.status !== "cancelled") return toast("Oportunidade arquivada nao encontrada.");
+  const canRestore = currentUser.role === "admin_manager" || opp.sdrId === currentUser.id;
+  if (!canRestore) return toast("Voce nao pode restaurar esta oportunidade.");
+  opp.status = opp.archivedFromStatus && opp.archivedFromStatus !== "cancelled" ? opp.archivedFromStatus : "draft";
+  opp.archivedAt = null;
+  opp.updatedAt = nowIso();
+  opp.timeline.unshift(event("opportunity_restored", "Oportunidade restaurada para a operacao ativa", currentUser.id));
+  addAudit("opportunity_restored", "Opportunity", id, { restoredStatus: opp.status });
+  saveState();
+  toast("Oportunidade restaurada.");
+  currentRoute = "opportunities";
+  render();
+}
+
+async function markNotificationRead(id, { rerender = true } = {}) {
+  const notification = byId(state.notifications, id);
+  if (!notification || notification.read) return;
+  if (notification.recipientUserId && notification.recipientUserId !== currentUser.id && currentUser.role !== "admin_manager") return;
+  try {
+    if (supabaseSyncReady && notification.recipientUserId === currentUser.id) {
+      await postWorkflow({ action: "mark_notification_read", notificationId: id });
+      notification.read = true;
+      notification.readAt = nowIso();
+      await initSupabaseSync();
+    } else {
+      notification.read = true;
+      notification.readAt = nowIso();
+      await saveState();
+    }
+  } catch (error) {
+    toast(error.message);
+  }
+  if (rerender) render();
+}
+
+async function markAllNotificationsRead() {
+  const unread = visibleNotifications().filter((item) => !item.read);
+  for (const item of unread) await markNotificationRead(item.id, { rerender: false });
+  toast("Notificacoes marcadas como lidas.");
+  render();
+}
+
+async function openNotification(id) {
+  const notification = byId(state.notifications, id);
+  if (!notification) return;
+  await markNotificationRead(id, { rerender: false });
+  const entityType = String(notification.entityType || "").toLowerCase();
+  if (entityType.includes("opportunity")) drawer = { type: "opportunity", id: notification.entityId };
+  else if (entityType.includes("contract")) drawer = { type: "contract", id: notification.entityId };
+  else if (entityType.includes("project")) drawer = { type: "project", id: notification.entityId };
+  else currentRoute = "notifications";
   render();
 }
 
 async function submitOpportunity(id) {
-  const current = byId(state.opportunities, id);
+  let current = byId(state.opportunities, id);
   if (currentUser.role !== "sdr" || current?.sdrId !== currentUser.id) return toast("Apenas a SDR responsável pode pedir a aprovação.");
   if (!canRequestConditionApproval(current)) return toast("Esta oportunidade nao pode ser enviada para aprovacao neste status.");
   const missing = conditionApprovalMissingFields(current);
   if (supabaseSyncReady) {
     try {
       await saveState();
+      current = byId(state.opportunities, id);
       await postWorkflow({
         action: "request_approval",
         opportunityId: id,
@@ -4664,9 +4942,7 @@ async function submitOpportunity(id) {
   render();
 }
 
-function submitApprovalFollowAction(id, formElement) {
-  const form = new FormData(formElement);
-  const action = formElement.dataset.approvalAction;
+async function submitApprovalFollowAction(id, form, action) {
   const payload = {
     reason: String(form.get("reason") || "").trim(),
     followAction: String(form.get("followAction") || "").trim(),
@@ -4674,9 +4950,9 @@ function submitApprovalFollowAction(id, formElement) {
     amountCents: form.get("amount") ? cents(form.get("amount")) : null,
   };
 
-  if (action === "approved" || action === "approved_with_changes") return approveOpportunity(id, action, payload);
-  if (action === "needs_information") return needsInformation(id, payload);
-  if (action === "rejected") return rejectOpportunity(id, payload);
+  if (action === "approved" || action === "approved_with_changes") return await approveOpportunity(id, action, payload);
+  if (action === "needs_information") return await needsInformation(id, payload);
+  if (action === "rejected") return await rejectOpportunity(id, payload);
   return toast("Acao invalida.");
 }
 
@@ -4724,6 +5000,10 @@ async function approveOpportunity(id, mode, payload = {}) {
         expectedVersion: Number(opp._version || 1),
       });
       await initSupabaseSync();
+      const refreshed = byId(state.opportunities, id);
+      applyFollowAction(refreshed, payload);
+      refreshed?.timeline?.unshift(event("approval_follow_action_set", `Proxima acao definida: ${payload.followAction || "-"}`, currentUser.id, { nextActionDate: payload.nextActionDate || null }));
+      await saveState();
       toast("Condicao aprovada: contrato e projeto criados pelo Supabase.");
       render();
       return;
@@ -4771,10 +5051,33 @@ function addDays(days) {
   return date.toISOString().slice(0, 10);
 }
 
-function needsInformation(id, payload = {}) {
+async function needsInformation(id, payload = {}) {
   const reason = payload.reason || "";
   if (!reason) return;
   const opp = byId(state.opportunities, id);
+  if (supabaseSyncReady) {
+    try {
+      await postWorkflow({
+        action: "review_opportunity",
+        opportunityId: id,
+        reviewAction: "needs_information",
+        reason,
+        expectedVersion: Number(opp?._version || 1),
+      });
+      await initSupabaseSync();
+      const refreshed = byId(state.opportunities, id);
+      applyFollowAction(refreshed, payload);
+      refreshed?.timeline?.unshift(event("approval_needs_information", `Gestor solicitou mais informacoes: ${reason}`, currentUser.id));
+      await saveState();
+      toast("Pedido de informacao enviado.");
+      render();
+      return;
+    } catch (error) {
+      toast(error.message);
+      await initSupabaseSync();
+      return;
+    }
+  }
   applyFollowAction(opp, payload);
   mutateOpportunity(id, "needs_information", `Gestor solicitou mais informacoes: ${reason}`, "approval_needs_information", { reason });
   addNotification(`O gestor solicitou informações adicionais em ${opp.clientName}.`, { recipientUserId: opp.sdrId });
@@ -4783,10 +5086,33 @@ function needsInformation(id, payload = {}) {
   render();
 }
 
-function rejectOpportunity(id, payload = {}) {
+async function rejectOpportunity(id, payload = {}) {
   const reason = payload.reason || "";
   if (!reason) return toast("A justificativa e obrigatoria.");
   const opp = byId(state.opportunities, id);
+  if (supabaseSyncReady) {
+    try {
+      await postWorkflow({
+        action: "review_opportunity",
+        opportunityId: id,
+        reviewAction: "rejected",
+        reason,
+        expectedVersion: Number(opp?._version || 1),
+      });
+      await initSupabaseSync();
+      const refreshed = byId(state.opportunities, id);
+      applyFollowAction(refreshed, payload);
+      refreshed?.timeline?.unshift(event("approval_rejected", `Oportunidade recusada: ${reason}`, currentUser.id));
+      await saveState();
+      toast("Oportunidade recusada.");
+      render();
+      return;
+    } catch (error) {
+      toast(error.message);
+      await initSupabaseSync();
+      return;
+    }
+  }
   applyFollowAction(opp, payload);
   mutateOpportunity(id, "rejected", `Oportunidade recusada: ${reason}`, "approval_rejected", { reason });
   addNotification(`A condição de ${opp.clientName} foi recusada pelo gestor.`, { recipientUserId: opp.sdrId });
@@ -5013,50 +5339,58 @@ async function savePaymentRecord(contractId, formElement) {
   if (!contract || currentUser.role !== "admin_manager") return toast("Apenas o gestor pode registrar pagamentos.");
   if (contract.amountCents <= 0) return toast("Defina o valor do contrato antes de registrar pagamentos.");
   const form = new FormData(formElement);
+  const paymentId = String(form.get("paymentId") || "") || uid("pay");
+  const existing = byId(state.payments, paymentId);
   const amountCents = cents(form.get("amount"));
   if (!amountCents) return toast("Informe um valor valido para o registro.");
   const status = form.get("status") === "confirmed" ? "confirmed" : "pending";
   const paidAtDate = form.get("paidAt");
   const dueDate = form.get("dueDate") || paidAtDate || nowIso().slice(0, 10);
   const receiptFile = form.get("receiptFile");
-  let receiptAttachmentId = "";
+  let receiptAttachmentId = existing?.receiptAttachmentId || "";
   if (receiptFile?.name) {
     try {
-      const attachment = await uploadPortalAttachment(receiptFile, { kind: "customer_payment_receipt", contractId });
+      const attachment = await uploadPortalAttachment(receiptFile, { kind: "customer_payment_receipt", contractId, paymentId });
       receiptAttachmentId = attachment?.id || "";
     } catch {
       return toast("Não foi possível enviar o comprovante. Tente novamente.");
     }
   }
   const payment = {
-    id: uid("pay"),
+    ...(existing || {}),
+    id: paymentId,
     contractId,
     amountCents,
     type: form.get("type") || "contract_payment",
     method: form.get("method") || "",
+    payerName: String(form.get("payerName") || "").trim(),
+    receiptNumber: String(form.get("receiptNumber") || "").trim(),
     reference: String(form.get("reference") || "").trim(),
     notes: String(form.get("notes") || "").trim(),
     status,
     dueDate,
-    createdAt: nowIso(),
+    createdAt: existing?.createdAt || nowIso(),
+    updatedAt: nowIso(),
     paidAt: status === "confirmed" ? (paidAtDate ? new Date(`${paidAtDate}T12:00:00`).toISOString() : nowIso()) : null,
     confirmedBy: status === "confirmed" ? currentUser.id : null,
-    receiptFileName: receiptFile?.name || "",
+    receiptFileName: receiptFile?.name || existing?.receiptFileName || "",
     receiptAttachmentId,
     recordSource: "manual",
   };
-  state.payments.unshift(payment);
+  if (existing) Object.assign(existing, payment);
+  else state.payments.unshift(payment);
   const opp = byId(state.opportunities, contract.opportunityId);
   opp?.timeline.unshift(event(
-    status === "confirmed" ? "external_payment_confirmed" : "external_payment_registered",
-    `${status === "confirmed" ? "Pagamento externo confirmado" : "Pagamento externo registrado"}: ${brl(payment.amountCents)}`,
+    existing ? "external_payment_updated" : (status === "confirmed" ? "external_payment_confirmed" : "external_payment_registered"),
+    `${existing ? "Pagamento externo atualizado" : status === "confirmed" ? "Pagamento externo confirmado" : "Pagamento externo registrado"}: ${brl(payment.amountCents)}`,
     currentUser.id,
     { paymentId: payment.id, contractId }
   ));
-  addAudit("contract_payment_registered", "CustomerPayment", payment.id, { contractId, status: payment.status, recordOnly: true });
-  saveState();
-  toast(status === "confirmed" ? "Pagamento externo confirmado e registrado." : "Pagamento externo registrado para conferencia.");
-  drawer = { type: "contract", id: contractId };
+  addAudit(existing ? "contract_payment_updated" : "contract_payment_registered", "CustomerPayment", payment.id, { contractId, status: payment.status, recordOnly: true });
+  await saveState();
+  toast(existing ? "Registro de pagamento atualizado." : status === "confirmed" ? "Pagamento externo confirmado e registrado." : "Pagamento externo registrado para conferencia.");
+  drawer = null;
+  currentRoute = "payments";
   render();
 }
 
@@ -5148,6 +5482,75 @@ function syncPayoutBatchTotals() {
       return sum + (commission?.amountCents || 0);
     }, 0);
   });
+}
+
+async function createManualProject(form) {
+  if (currentUser.role !== "admin_manager") return toast("Apenas o gestor pode criar projetos manualmente.");
+  const serviceIds = normalizeServiceIds(form.getAll("serviceIds"));
+  if (!serviceIds.length) return toast("Selecione pelo menos um servico para o projeto.");
+  const clientName = String(form.get("clientName") || "").trim();
+  const projectName = String(form.get("projectName") || "").trim();
+  if (!clientName || !projectName) return toast("Informe cliente e nome do projeto.");
+  const opportunityId = uid("opp");
+  const projectId = uid("prj");
+  const responsibleId = form.get("sdrId") || MANAGEMENT_OWNER_ID;
+  const stageNames = form.get("template") === "simple"
+    ? ["Briefing", "Planejamento", "Producao", "Revisao", "Entrega"]
+    : workflowTemplate;
+  const opportunity = {
+    id: opportunityId,
+    organizationId: "org-mada",
+    sdrId: responsibleId,
+    clientName,
+    brandName: String(form.get("brandName") || "").trim() || clientName,
+    serviceId: serviceIds[0],
+    serviceIds,
+    crmStatus: "sale_completed",
+    status: "commercial_condition_approved",
+    suggestedAmountCents: 0,
+    requestedConditions: "50_50",
+    suggestedPaymentTerms: "50_50",
+    nextAction: "",
+    nextActionDate: "",
+    manualProjectOnly: true,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    timeline: [event("manual_project_source_created", "Registro auxiliar criado para projeto manual", currentUser.id)],
+  };
+  const project = {
+    id: projectId,
+    organizationId: "org-mada",
+    opportunityId,
+    contractId: null,
+    sdrId: responsibleId === MANAGEMENT_OWNER_ID ? null : responsibleId,
+    managerId: currentUser.id,
+    serviceId: serviceIds[0],
+    name: projectName,
+    status: form.get("status") || "planning",
+    startsAt: form.get("startsAt") ? new Date(`${form.get("startsAt")}T12:00:00`).toISOString() : null,
+    targetEndAt: form.get("targetEndAt") || "",
+    manualEntry: true,
+    stages: stageNames.map((name, index) => ({
+      id: uid("stg"),
+      sequenceNumber: index + 1,
+      name,
+      status: index === 0 ? "ready" : "locked",
+      responsibleManagerId: currentUser.id,
+      dueAt: form.get("targetEndAt") || addDays((index + 1) * 7),
+      events: [],
+    })),
+    events: [event("manual_project_created", "Projeto criado manualmente pelo gestor", currentUser.id)],
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  project.currentStageId = project.stages[0]?.id || null;
+  state.opportunities.unshift(opportunity);
+  state.projects.unshift(project);
+  addAudit("manual_project_created", "Project", projectId, { opportunityId, serviceIds, responsibleId });
+  await saveState();
+  toast("Projeto criado e salvo.");
+  drawer = { type: "project", id: projectId };
+  render();
 }
 
 function updateProjectStatus(projectId, status) {
