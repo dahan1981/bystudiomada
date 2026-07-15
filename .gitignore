@@ -1,1 +1,9 @@
-.vercel
+node_modules/
+.env
+.env.*
+!.env.example
+.private/
+coverage/
+test-results/
+playwright-report/
+.vercel/

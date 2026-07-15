@@ -1,4 +1,5 @@
 {
+  "buildCommand": "npm run ci",
   "headers": [
     {
       "source": "/portal-mada/(.*)",

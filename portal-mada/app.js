@@ -320,7 +320,7 @@ const dateFormat = new Intl.DateTimeFormat("pt-BR", {
   timeZone: "America/Sao_Paulo",
 });
 
-var state = loadState();
+var state = normalizeState(seedState());
 let currentUser = null;
 let authReady = false;
 let currentRoute = "dashboard";
@@ -328,11 +328,12 @@ let drawer = null;
 let commandMenuOpen = false;
 let toastTimer = null;
 let mobileNavOpen = false;
+let mfaEnrollment = null;
 let supabaseSyncStatus = "Cache local";
 let supabaseSyncInFlight = false;
 let supabaseSyncQueued = false;
+let supabaseSyncPromise = Promise.resolve();
 let supabaseSyncReady = false;
-let stateRevision = null;
 
 function attachmentUrl(id) {
   return id ? `/api/portal-file?id=${encodeURIComponent(id)}` : "";
@@ -354,8 +355,12 @@ function fileToBase64(file) {
 
 async function uploadPortalAttachment(file, metadata = {}) {
   if (!file?.name) return null;
-  if (file.size > 3 * 1024 * 1024) {
-    toast("Arquivo muito grande. Limite atual: 3MB.");
+  if (file.size > 10 * 1024 * 1024) {
+    toast("Arquivo muito grande. Limite atual: 10 MB.");
+    return null;
+  }
+  if (!["application/pdf", "image/jpeg", "image/png"].includes(file.type)) {
+    toast("Envie um arquivo PDF, JPG ou PNG.");
     return null;
   }
   const id = uid("att");
@@ -376,10 +381,7 @@ async function uploadPortalAttachment(file, metadata = {}) {
 
 function seedState() {
   return {
-    users: [
-      { id: "usr-admin", name: "Joao Dahan", email: "gestor@bystudiomada.com.br", role: "admin_manager", active: true },
-      { id: "usr-sdr", name: "SDR Mada", email: "sdr@bystudiomada.com.br", role: "sdr", active: true },
-    ],
+    users: [],
     services,
     opportunities: [],
     approvalRequests: [],
@@ -570,7 +572,7 @@ function saveLocalState() {
 
 function saveState() {
   saveLocalState();
-  queueSupabaseSave();
+  return queueSupabaseSave();
 }
 
 async function initSupabaseSync() {
@@ -590,7 +592,6 @@ async function initSupabaseSync() {
     const row = await response.json();
     if (row?.data) {
       state = normalizeState({ ...seedState(), ...row.data });
-      stateRevision = row.updated_at || null;
       saveLocalState();
       supabaseSyncReady = true;
       supabaseSyncStatus = "Sincronizado com Supabase";
@@ -613,15 +614,19 @@ async function initSupabaseSync() {
 }
 
 function queueSupabaseSave() {
-  if (!SUPABASE_CONFIG.endpoint || !supabaseSyncReady) return;
+  if (!SUPABASE_CONFIG.endpoint || !supabaseSyncReady) return Promise.resolve();
   supabaseSyncQueued = true;
   supabaseSyncStatus = "Salvando alterações";
-  if (!supabaseSyncInFlight) void flushSupabaseSave();
+  supabaseSyncPromise = supabaseSyncPromise.then(async () => {
+    if (!supabaseSyncQueued) return;
+    supabaseSyncQueued = false;
+    await flushSupabaseSave();
+  });
+  return supabaseSyncPromise;
 }
 
 async function flushSupabaseSave() {
-  if (!supabaseSyncQueued || supabaseSyncInFlight) return;
-  supabaseSyncQueued = false;
+  if (supabaseSyncInFlight) return;
   supabaseSyncInFlight = true;
   try {
     await pushSupabaseState();
@@ -659,7 +664,6 @@ async function pushSupabaseState() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       data: state,
-      updatedAt: stateRevision,
     }),
   });
   const payload = await response.json().catch(() => ({}));
@@ -668,23 +672,14 @@ async function pushSupabaseState() {
     if (response.status === 409) error.code = "STATE_CONFLICT";
     throw error;
   }
-  stateRevision = payload.updated_at || stateRevision;
-}
-
-function loadUser() {
-  const raw = localStorage.getItem(`${STORAGE_KEY}.user`);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
+  if (payload.data) {
+    state = normalizeState({ ...seedState(), ...payload.data });
+    saveLocalState();
   }
 }
 
 function saveUser(user) {
   currentUser = user;
-  if (user) localStorage.setItem(`${STORAGE_KEY}.user`, JSON.stringify(user));
-  else localStorage.removeItem(`${STORAGE_KEY}.user`);
 }
 
 async function bootstrapApp() {
@@ -705,8 +700,8 @@ async function bootstrapApp() {
   render();
 }
 
-function uid(prefix) {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+function uid() {
+  return crypto.randomUUID();
 }
 
 function nowIso() {
@@ -1170,6 +1165,13 @@ function render() {
     refreshIcons();
     return;
   }
+  if (currentUser.mfaRequired) {
+    app.className = "app-shell";
+    app.innerHTML = renderMfaChallenge();
+    bindMfaChallenge();
+    refreshIcons();
+    return;
+  }
 
   app.className = "layout";
   app.innerHTML = `
@@ -1179,7 +1181,7 @@ function render() {
         <div class="topbar-leading">
           <button class="mobile-menu icon-button" type="button" data-mobile-menu aria-label="Abrir menu">${renderIcon("menu")}</button>
           <div class="topbar-context">
-            <span>Studio Mada</span>
+            <span>${currentUser.workspaceKind === "training" ? "Ambiente de treinamento" : "Mada Operação"}</span>
             <strong>${esc(routeLabel(currentRoute))}</strong>
           </div>
         </div>
@@ -1207,7 +1209,46 @@ function render() {
   refreshIcons();
 }
 
+function renderMfaChallenge() {
+  return `
+    <main class="auth-screen">
+      <section class="auth-card">
+        <div class="auth-brand"><span class="brand-mark">M</span><span>Studio Mada</span></div>
+        <form class="auth-form" data-mfa-challenge-form>
+          <div class="auth-form-head"><strong>Verificação em duas etapas</strong><span>Digite o código atual do seu aplicativo autenticador.</span></div>
+          <label class="field"><span>Código de 6 dígitos</span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></label>
+          <button class="button" type="submit">Verificar ${renderIcon("shield-check")}</button>
+          <div class="auth-error" data-mfa-error hidden></div>
+        </form>
+      </section>
+    </main>
+  `;
+}
+
+function bindMfaChallenge() {
+  document.querySelector("[data-mfa-challenge-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const errorBox = document.querySelector("[data-mfa-error]");
+    try {
+      const factors = await postPortal("/api/portal-auth", { action: "mfa_list" });
+      const factor = factors.factors.find((item) => item.status === "verified") || factors.factors[0];
+      if (!factor) throw new Error("Nenhum autenticador configurado para esta conta.");
+      await postPortal("/api/portal-auth", { action: "mfa_verify", factorId: factor.id, code: new FormData(event.currentTarget).get("code") });
+      currentUser.mfaRequired = false;
+      currentUser.mfaCurrentLevel = "aal2";
+      authReady = false;
+      render();
+      await bootstrapApp();
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+    }
+  });
+}
+
 function renderAuth() {
+  const recovery = new URLSearchParams(location.hash.replace(/^#/, ""));
+  const hasRecoverySession = Boolean(recovery.get("access_token") && recovery.get("refresh_token"));
   return `
     <main class="auth-screen">
       <section class="auth-card" aria-label="Acesso ao Portal Comercial Mada">
@@ -1220,6 +1261,15 @@ function renderAuth() {
           <h1>Portal Comercial</h1>
           <p>Operações comerciais, contratos e projetos em um único ambiente.</p>
         </div>
+        ${hasRecoverySession ? `
+        <form class="auth-form" data-complete-recovery-form>
+          <div class="auth-form-head"><strong>Definir nova senha</strong><span>Crie uma senha exclusiva com pelo menos 10 caracteres.</span></div>
+          <label class="field"><span>Nova senha</span><input name="newPassword" type="password" minlength="10" autocomplete="new-password" required /></label>
+          <label class="field"><span>Confirmar senha</span><input name="confirmPassword" type="password" minlength="10" autocomplete="new-password" required /></label>
+          <button class="button" type="submit" data-recovery-button>Salvar senha ${renderIcon("arrow-right")}</button>
+          <div class="auth-error" data-auth-error hidden></div>
+        </form>
+        ` : `
         <form class="auth-form" data-login-form>
           <div class="auth-form-head"><strong>Acessar sua conta</strong><span>Use o acesso criado pelo gestor.</span></div>
           <label class="field">
@@ -1232,10 +1282,16 @@ function renderAuth() {
           </label>
           <button class="button" type="submit" data-login-button>Entrar ${renderIcon("arrow-right")}</button>
           <div class="auth-error" data-auth-error hidden></div>
-          <div class="demo-note">
-            Cada pessoa acessa somente os dados permitidos para o seu perfil.
-          </div>
+          <button class="auth-link" type="button" data-show-recovery>Esqueci minha senha</button>
         </form>
+        <form class="auth-form auth-recovery-form" data-recovery-form hidden>
+          <div class="auth-form-head"><strong>Recuperar acesso</strong><span>Enviaremos um link para o e-mail cadastrado.</span></div>
+          <label class="field"><span>E-mail</span><input name="email" type="email" autocomplete="email" required /></label>
+          <button class="button secondary" type="submit">Enviar link</button>
+          <button class="auth-link" type="button" data-back-login>Voltar ao login</button>
+          <div class="auth-error" data-recovery-message hidden></div>
+        </form>
+        `}
       </section>
     </main>
   `;
@@ -1274,6 +1330,18 @@ function renderSidebar() {
         `).join("")}
       </nav>
       <div class="user-block">
+        ${currentUser.memberships?.length > 1 ? `
+          <label class="workspace-switch">
+            <span>Ambiente</span>
+            <select data-workspace-switch aria-label="Trocar ambiente">
+              ${currentUser.memberships.map((membership) => `
+                <option value="${esc(membership.organizationId)}" ${membership.organizationId === currentUser.organizationId ? "selected" : ""}>
+                  ${membership.workspaceKind === "training" ? "Treinamento" : "Operação"}
+                </option>
+              `).join("")}
+            </select>
+          </label>
+        ` : ""}
         <div class="user-summary">
           <span class="user-avatar">${esc(initials(currentUser.name))}</span>
           <div><strong>${esc(currentUser.name)}</strong><span>${roleLabels[currentUser.role]}</span></div>
@@ -2519,16 +2587,13 @@ function renderSettings() {
               <div class="team-identity"><strong>${esc(user.name)}</strong><span>${esc(user.email)}</span></div>
               <div class="team-access">
                 <span class="status ${user.active === false ? "rejected" : "approved"}">${user.active === false ? "Inativa" : "Ativa"}</span>
-                <span class="access-note">${user.hasAccess ? "Senha configurada" : "Acesso pendente"}</span>
+                <span class="access-note">Acesso individual por e-mail</span>
               </div>
               <details class="account-menu">
                 <summary class="icon-button" aria-label="Gerenciar ${esc(user.name)}">${renderIcon("ellipsis")}</summary>
                 <div class="account-menu-panel">
                   <strong>${roleLabels[user.role]}</strong>
-                  <form data-reset-user-password="${user.id}">
-                    <label class="field"><span>${user.hasAccess ? "Nova senha temporária" : "Definir senha temporária"}</span><input name="password" type="password" minlength="8" required placeholder="Mínimo de 8 caracteres" /></label>
-                    <button class="button secondary compact-button" type="submit">${user.hasAccess ? "Redefinir senha" : "Liberar acesso"}</button>
-                  </form>
+                  <button class="button secondary compact-button" type="button" data-send-user-recovery="${user.id}">Enviar recuperação de senha</button>
                   ${user.role === "sdr" ? `<button class="button ghost compact-button" type="button" data-toggle-user-active="${user.id}" data-active="${user.active === false ? "true" : "false"}">${user.active === false ? "Reativar conta" : "Desativar conta"}</button>` : ""}
                 </div>
               </details>
@@ -2543,8 +2608,8 @@ function renderSettings() {
           <form class="form-grid settings-form" data-create-sdr-form>
             <label class="field full"><span>Nome da SDR</span><input name="name" required /></label>
             <label class="field full"><span>E-mail de acesso</span><input name="email" type="email" required /></label>
-            <label class="field full"><span>Senha temporária</span><input name="password" type="password" minlength="8" required /></label>
-            <button class="button full" type="submit">${renderIcon("user-plus")} Criar conta SDR</button>
+            <p class="form-note full">A SDR receberá um convite para definir a própria senha. Nenhuma senha será compartilhada pelo gestor.</p>
+            <button class="button full" type="submit">${renderIcon("user-plus")} Enviar convite SDR</button>
           </form>
         </section>
 
@@ -2552,10 +2617,29 @@ function renderSettings() {
           <div class="section-head"><div><h3>Alterar minha senha</h3><p>Use uma senha exclusiva para o Portal Mada.</p></div></div>
           <form class="form-grid settings-form" data-change-password-form>
             <label class="field full"><span>Senha atual</span><input name="currentPassword" type="password" required /></label>
-            <label class="field full"><span>Nova senha</span><input name="newPassword" type="password" minlength="8" required /></label>
+            <label class="field full"><span>Nova senha</span><input name="newPassword" type="password" minlength="10" required /></label>
             <button class="button secondary full" type="submit">Atualizar senha</button>
           </form>
         </section>
+
+        ${currentUser.role === "admin_manager" ? `
+        <section class="card">
+          <div class="section-head"><div><h3>Verificação em duas etapas</h3><p>Obrigatória para o acesso do gestor na liberação geral.</p></div></div>
+          ${currentUser.mfaEnrolled ? `
+            <div class="security-status is-secure">${renderIcon("shield-check")} <strong>MFA configurado</strong></div>
+          ` : mfaEnrollment ? `
+            <div class="mfa-enrollment">
+              <img src="${esc(mfaEnrollment.qrCode)}" alt="QR Code para configurar autenticador" />
+              <p>Escaneie o QR Code no autenticador e confirme o código.</p>
+              <code>${esc(mfaEnrollment.secret)}</code>
+              <form data-mfa-enrollment-form>
+                <label class="field"><span>Código de 6 dígitos</span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required /></label>
+                <button class="button" type="submit">Ativar MFA</button>
+              </form>
+            </div>
+          ` : `<button class="button secondary full" type="button" data-start-mfa>Configurar autenticador</button>`}
+        </section>
+        ` : ""}
       </div>
     </div>
 
@@ -3668,7 +3752,16 @@ function renderSdrBatchMiniTable(items) {
 }
 
 function bindAuth() {
-  document.querySelector("[data-login-form]").addEventListener("submit", async (event) => {
+  document.querySelector("[data-show-recovery]")?.addEventListener("click", () => {
+    document.querySelector("[data-login-form]").hidden = true;
+    document.querySelector("[data-recovery-form]").hidden = false;
+  });
+  document.querySelector("[data-back-login]")?.addEventListener("click", () => {
+    document.querySelector("[data-login-form]").hidden = false;
+    document.querySelector("[data-recovery-form]").hidden = true;
+  });
+
+  document.querySelector("[data-login-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const button = document.querySelector("[data-login-button]");
@@ -3680,7 +3773,7 @@ function bindAuth() {
       const response = await fetch("/api/portal-auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: form.get("email"), password: form.get("password") }),
+        body: JSON.stringify({ action: "login", email: form.get("email"), password: form.get("password") }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || "Não foi possível entrar.");
@@ -3697,6 +3790,47 @@ function bindAuth() {
       button.disabled = false;
       button.innerHTML = `Entrar ${renderIcon("arrow-right")}`;
       refreshIcons();
+    }
+  });
+
+  document.querySelector("[data-recovery-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const message = document.querySelector("[data-recovery-message]");
+    try {
+      const payload = await postPortal("/api/portal-auth", { action: "recover", email: form.get("email") });
+      message.textContent = payload.message;
+      message.classList.add("is-success");
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.remove("is-success");
+    }
+    message.hidden = false;
+  });
+
+  document.querySelector("[data-complete-recovery-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const errorBox = document.querySelector("[data-auth-error]");
+    if (form.get("newPassword") !== form.get("confirmPassword")) {
+      errorBox.textContent = "As senhas não coincidem.";
+      errorBox.hidden = false;
+      return;
+    }
+    const tokens = new URLSearchParams(location.hash.replace(/^#/, ""));
+    try {
+      await postPortal("/api/portal-auth", {
+        action: "complete_recovery",
+        accessToken: tokens.get("access_token"),
+        refreshToken: tokens.get("refresh_token"),
+        newPassword: form.get("newPassword"),
+      });
+      history.replaceState({}, "", `${location.pathname}${location.search.replace(/([?&])mode=recovery(&|$)/, "$1").replace(/[?&]$/, "")}`);
+      await bootstrapApp();
+      toast("Senha definida. Acesso liberado.");
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
     }
   });
 }
@@ -3737,6 +3871,27 @@ function bindApp() {
   document.querySelector("[data-mobile-menu]")?.addEventListener("click", () => {
     mobileNavOpen = !mobileNavOpen;
     render();
+  });
+
+  document.querySelector("[data-workspace-switch]")?.addEventListener("change", async (event) => {
+    event.currentTarget.disabled = true;
+    try {
+      const payload = await postPortal("/api/portal-auth", {
+        action: "select_workspace",
+        organizationId: event.currentTarget.value,
+      });
+      currentUser = payload.user;
+      state = normalizeState(seedState());
+      drawer = null;
+      supabaseSyncReady = false;
+      authReady = false;
+      render();
+      await initSupabaseSync();
+      toast(`Ambiente alterado para ${currentUser.workspaceKind === "training" ? "Treinamento" : "Operação"}.`);
+    } catch (error) {
+      toast(error.message);
+      render();
+    }
   });
 
   document.querySelector("[data-logout]")?.addEventListener("click", async () => {
@@ -3852,16 +4007,40 @@ function bindForms() {
     await createSdrAccount(event.currentTarget);
   });
 
-  document.querySelectorAll("[data-reset-user-password]").forEach((form) => {
-    form.addEventListener("submit", async (event) => {
-      event.preventDefault();
-      await resetPortalUserPassword(form.dataset.resetUserPassword, form);
-    });
+  document.querySelectorAll("[data-send-user-recovery]").forEach((button) => {
+    button.addEventListener("click", async () => sendPortalUserRecovery(button.dataset.sendUserRecovery, button));
   });
 
   document.querySelector("[data-change-password-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await changeCurrentPassword(event.currentTarget);
+  });
+
+  document.querySelector("[data-start-mfa]")?.addEventListener("click", async (event) => {
+    event.currentTarget.disabled = true;
+    try {
+      mfaEnrollment = await postPortal("/api/portal-auth", { action: "mfa_enroll" });
+      render();
+    } catch (error) {
+      toast(error.message);
+      event.currentTarget.disabled = false;
+    }
+  });
+
+  document.querySelector("[data-mfa-enrollment-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      await postPortal("/api/portal-auth", {
+        action: "mfa_verify",
+        factorId: mfaEnrollment.factorId,
+        code: new FormData(event.currentTarget).get("code"),
+      });
+      mfaEnrollment = null;
+      await bootstrapApp();
+      toast("Verificação em duas etapas ativada.");
+    } catch (error) {
+      toast(error.message);
+    }
   });
 
   document.querySelector("[data-opportunity-form]")?.addEventListener("submit", (event) => {
@@ -4094,14 +4273,6 @@ function bindActions() {
     render();
   });
   action("[data-toggle-user-active]", (button) => togglePortalUser(button.dataset.toggleUserActive, button.dataset.active === "true"));
-  action("[data-reset-demo]", () => {
-    if (!confirm("Tem certeza? Esta ação limpa os dados do navegador atual e restaura o estado inicial.")) return;
-    localStorage.removeItem(STORAGE_KEY);
-    state = seedState();
-    saveState();
-    toast("Dados do navegador restaurados.");
-    render();
-  });
 }
 
 function action(selector, handler) {
@@ -4119,6 +4290,10 @@ async function postPortal(endpoint, payload) {
   return body;
 }
 
+async function postWorkflow(payload) {
+  return postPortal("/api/portal-workflow", payload);
+}
+
 function setFormBusy(form, busy) {
   form.querySelectorAll("button, input, select, textarea").forEach((control) => control.disabled = busy);
 }
@@ -4128,12 +4303,12 @@ async function createSdrAccount(form) {
   const data = new FormData(form);
   try {
     await postPortal("/api/portal-users", {
-      action: "create",
+      action: "invite",
       name: data.get("name"),
       email: data.get("email"),
-      password: data.get("password"),
     });
-    toast("Conta SDR criada e pronta para acesso.");
+    form.reset();
+    toast("Convite enviado para a SDR definir a própria senha.");
     await initSupabaseSync();
   } catch (error) {
     toast(error.message);
@@ -4141,16 +4316,15 @@ async function createSdrAccount(form) {
   }
 }
 
-async function resetPortalUserPassword(userId, form) {
-  setFormBusy(form, true);
-  const data = new FormData(form);
+async function sendPortalUserRecovery(userId, button) {
+  button.disabled = true;
   try {
-    await postPortal("/api/portal-users", { action: "reset_password", userId, password: data.get("password") });
-    toast("Senha temporária atualizada.");
-    await initSupabaseSync();
+    await postPortal("/api/portal-users", { action: "send_recovery", userId });
+    toast("E-mail de recuperação enviado.");
   } catch (error) {
     toast(error.message);
-    setFormBusy(form, false);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -4458,11 +4632,29 @@ function archiveOpportunity(id) {
   render();
 }
 
-function submitOpportunity(id) {
+async function submitOpportunity(id) {
   const current = byId(state.opportunities, id);
   if (currentUser.role !== "sdr" || current?.sdrId !== currentUser.id) return toast("Apenas a SDR responsável pode pedir a aprovação.");
   if (!canRequestConditionApproval(current)) return toast("Esta oportunidade nao pode ser enviada para aprovacao neste status.");
   const missing = conditionApprovalMissingFields(current);
+  if (supabaseSyncReady) {
+    try {
+      await saveState();
+      await postWorkflow({
+        action: "request_approval",
+        opportunityId: id,
+        expectedVersion: Number(current._version || 1),
+      });
+      await initSupabaseSync();
+      toast("Pedido de aprovacao enviado para a fila do gestor.");
+      render();
+      return;
+    } catch (error) {
+      toast(error.message);
+      await initSupabaseSync();
+      return;
+    }
+  }
   if (missing.length) return toast(`Complete ${missing.join(", ")} antes de pedir aprovação.`);
   const opp = mutateOpportunity(id, "pending_approval", "Pedido de aprovacao da condicao enviado", "opportunity_submitted");
   if (!opp) return;
@@ -4511,8 +4703,9 @@ function applyFollowAction(opp, payload) {
   if (payload.reason) opp.notes = payload.reason;
 }
 
-function approveOpportunity(id, mode, payload = {}) {
+async function approveOpportunity(id, mode, payload = {}) {
   const opp = byId(state.opportunities, id);
+  if (!opp) return toast("Oportunidade nao encontrada.");
   const changed = mode === "approved_with_changes";
   const reason = payload.reason || (changed ? "" : "Aprovado sem alteracao.");
   if (changed && !reason) return toast("A justificativa e obrigatoria.");
@@ -4520,6 +4713,26 @@ function approveOpportunity(id, mode, payload = {}) {
   const suggestedNetAmountCents = netAmountAfterDiscount(opp.suggestedAmountCents, discountPercent);
   const amountCents = changed ? Number(payload.amountCents || 0) : suggestedNetAmountCents;
   if (changed && !amountCents) return toast("Informe o valor final aprovado.");
+  if (supabaseSyncReady) {
+    try {
+      await postWorkflow({
+        action: "review_opportunity",
+        opportunityId: id,
+        reviewAction: mode,
+        amountCents,
+        reason,
+        expectedVersion: Number(opp._version || 1),
+      });
+      await initSupabaseSync();
+      toast("Condicao aprovada: contrato e projeto criados pelo Supabase.");
+      render();
+      return;
+    } catch (error) {
+      toast(error.message);
+      await initSupabaseSync();
+      return;
+    }
+  }
   const previous = activeCondition(id);
   if (previous) previous.isActive = false;
   const versionNumber = state.conditions.filter((item) => item.opportunityId === id).length + 1;
@@ -4950,11 +5163,29 @@ function updateProjectStatus(projectId, status) {
   render();
 }
 
-function updateProjectStageStatus(projectId, stageId, status) {
+async function updateProjectStageStatus(projectId, stageId, status) {
   const project = byId(state.projects, projectId);
   const stage = project?.stages.find((item) => item.id === stageId);
   if (!project || !stage || stage.status === status) return;
   const previousStatus = stage.status;
+  if (supabaseSyncReady) {
+    try {
+      await postWorkflow({
+        action: "update_project_stage",
+        stageId,
+        status,
+        expectedVersion: Number(stage._version || 1),
+      });
+      await initSupabaseSync();
+      toast("Status da etapa atualizado.");
+      render();
+      return;
+    } catch (error) {
+      toast(error.message);
+      await initSupabaseSync();
+      return;
+    }
+  }
   stage.status = status;
   if (status === "in_progress" && !stage.startsAt) stage.startsAt = nowIso();
   if (["completed", "approved", "skipped", "cancelled"].includes(status)) stage.completedAt = nowIso();

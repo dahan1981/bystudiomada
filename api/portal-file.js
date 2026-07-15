@@ -1,6 +1,15 @@
-const { readState, withClient } = require("../lib/portal-db");
-const { getSessionUser, isSameOrigin } = require("../lib/portal-security");
-const { canAccessAttachment } = require("../lib/portal-scope");
+const crypto = require("crypto");
+const { getPortalSession, isSameOrigin } = require("../lib/portal-auth-session");
+const { createPublicClient } = require("../lib/supabase-server");
+
+const BUCKET = "portal-documents";
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ALLOWED_MIME_TYPES = new Set(["application/pdf", "image/jpeg", "image/png"]);
+
+function safeSegment(value, fallback = "general") {
+  const normalized = String(value || fallback).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return normalized.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 120) || fallback;
+}
 
 module.exports = async function handler(request, response) {
   if (!["GET", "POST"].includes(request.method)) {
@@ -14,79 +23,80 @@ module.exports = async function handler(request, response) {
   }
 
   try {
-    await withClient(async (client) => {
-      const stateRow = await readState(client);
-      const state = stateRow?.data || {};
-      const user = getSessionUser(request, state);
-      if (!user) {
-        response.status(401).json({ error: "Authentication required" });
+    const session = await getPortalSession(request, response);
+    if (!session) {
+      response.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    const supabase = createPublicClient(session.accessToken);
+
+    if (request.method === "GET") {
+      const id = String(request.query?.id || "");
+      const fileResult = await supabase.from("files").select("id, storage_path").eq("id", id).maybeSingle();
+      if (fileResult.error || !fileResult.data) {
+        response.status(fileResult.error ? 403 : 404).json({ error: "Arquivo não encontrado ou sem acesso." });
         return;
       }
-
-      if (request.method === "GET") {
-        const id = String(request.query?.id || "");
-        if (!id) {
-          response.status(400).json({ error: "Missing attachment id" });
-          return;
-        }
-        const result = await client.query(
-          "select filename, mime_type, data, metadata from public.portal_attachments where id = $1",
-          [id],
-        );
-        const row = result.rows[0];
-        if (!row) {
-          response.status(404).json({ error: "Attachment not found" });
-          return;
-        }
-        if (!canAccessAttachment(row.metadata, state, user)) {
-          response.status(403).json({ error: "Attachment access denied" });
-          return;
-        }
-        response.setHeader("Cache-Control", "private, no-store");
-        response.setHeader("Content-Type", row.mime_type || "application/octet-stream");
-        response.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(row.filename)}`);
-        response.status(200).send(row.data);
+      const signed = await supabase.storage.from(BUCKET).createSignedUrl(fileResult.data.storage_path, 300);
+      if (signed.error || !signed.data?.signedUrl) {
+        response.status(403).json({ error: "Não foi possível liberar o arquivo." });
         return;
       }
+      response.setHeader("Cache-Control", "private, no-store");
+      response.redirect(302, signed.data.signedUrl);
+      return;
+    }
 
-      if (user.role !== "admin_manager") {
-        response.status(403).json({ error: "Apenas o gestor pode anexar arquivos financeiros e comerciais" });
-        return;
-      }
+    if (session.user.role !== "admin_manager") {
+      response.status(403).json({ error: "Apenas o gestor pode anexar arquivos financeiros e comerciais." });
+      return;
+    }
+    const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
+    const filename = String(body.filename || "").trim();
+    const mimeType = String(body.mimeType || "");
+    const metadata = body.metadata || {};
+    const buffer = Buffer.from(String(body.contentBase64 || ""), "base64");
+    if (!filename || !buffer.length || !ALLOWED_MIME_TYPES.has(mimeType)) {
+      response.status(400).json({ error: "Envie um arquivo PDF, JPG ou PNG válido." });
+      return;
+    }
+    if (buffer.length > MAX_FILE_SIZE) {
+      response.status(413).json({ error: "O arquivo excede o limite de 10 MB." });
+      return;
+    }
 
-      const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
-      const id = String(body.id || "");
-      const filename = String(body.filename || "");
-      const mimeType = String(body.mimeType || "application/octet-stream");
-      const base64 = String(body.contentBase64 || "");
-      const metadata = { ...(body.metadata || {}), uploadedBy: user.id };
-      const buffer = Buffer.from(base64, "base64");
+    const id = crypto.randomUUID();
+    const kind = safeSegment(metadata.kind || "general");
+    const entityId = safeSegment(metadata.opportunityId || metadata.contractId || metadata.paymentId || metadata.payoutBatchId || "unlinked");
+    const storagePath = `${session.user.organizationId}/${kind}/${entityId}/${id}-${safeSegment(filename, "arquivo")}`;
+    const upload = await supabase.storage.from(BUCKET).upload(storagePath, buffer, { contentType: mimeType, upsert: false });
+    if (upload.error) throw upload.error;
 
-      if (!id || !filename || !buffer.length) {
-        response.status(400).json({ error: "Invalid attachment payload" });
-        return;
-      }
-      if (buffer.length > 3 * 1024 * 1024) {
-        response.status(413).json({ error: "Attachment exceeds 3MB limit" });
-        return;
-      }
-
-      await client.query(
-        `
-          insert into public.portal_attachments (id, filename, mime_type, size_bytes, data, metadata)
-          values ($1, $2, $3, $4, $5, $6::jsonb)
-          on conflict (id)
-          do update set filename = excluded.filename,
-            mime_type = excluded.mime_type,
-            size_bytes = excluded.size_bytes,
-            data = excluded.data,
-            metadata = excluded.metadata
-        `,
-        [id, filename, mimeType, buffer.length, buffer, JSON.stringify(metadata)],
-      );
-      response.status(200).json({ id, filename, mimeType, sizeBytes: buffer.length });
-    });
+    const inserted = await supabase.from("files").insert({
+      id,
+      organization_id: session.user.organizationId,
+      category: metadata.kind || "general",
+      display_name: filename,
+      storage_path: storagePath,
+      mime_type: mimeType,
+      size_bytes: buffer.length,
+      opportunity_id: metadata.opportunityId || null,
+      contract_id: metadata.contractId || null,
+      payment_id: metadata.paymentId || null,
+      payout_batch_id: metadata.payoutBatchId || null,
+      delegated_sdr_id: metadata.sdrId || metadata.delegatedSdrId || null,
+      notes: metadata.notes || null,
+      uploaded_by: session.user.id,
+    }).select("id, storage_path").single();
+    if (inserted.error) {
+      await supabase.storage.from(BUCKET).remove([storagePath]);
+      throw inserted.error;
+    }
+    response.status(201).json({ id, filename, mimeType, sizeBytes: buffer.length, storagePath });
   } catch (error) {
-    response.status(500).json({ error: "Attachment persistence unavailable", detail: error.message });
+    response.status(error.statusCode || 500).json({
+      error: error.statusCode ? error.message : "Attachment persistence unavailable",
+      detail: error.statusCode ? undefined : error.message,
+    });
   }
 };

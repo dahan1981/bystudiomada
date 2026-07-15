@@ -1,82 +1,12 @@
-# Decisoes e suposicoes
+# Decisões do Portal Mada
 
-## Decisoes desta rodada
-
-- O portal foi criado dentro de `portal-mada/` para nao alterar o site
-  institucional da raiz.
-- A URL esperada no mesmo dominio e `/portal-mada/`, sem link no menu publico.
-- A identidade visual segue as referencias fornecidas: sidebar fixa, fundo
-  claro, cards brancos, marrom como acento principal, chips de status e layout
-  administrativo leve.
-- Supabase fica para depois, conforme solicitado. Nesta rodada o estado fica em
-  `localStorage`.
-- O MVP implementa regras de negocio no frontend apenas para testar fluxo. Na
-  integracao real, elas devem ir para banco/backend.
-
-## Suposicoes
-
-- O papel `admin_manager` concentra comercial, financeiro e projetos.
-- O papel `sdr` ve apenas oportunidades, contratos, comissoes e projetos
-  originados por ela.
-- A comissao padrao e 10% sobre o valor final aprovado do contrato.
-- O pagamento inicial padrao de demo e 50% do contrato.
-- A validade padrao da condicao aprovada e 30 dias.
-- O template padrao de projeto e o fluxo de identidade visual descrito no PDF.
-
-## Rotas/telas planejadas no MVP
-
-- `dashboard`
-- `approvals`
-- `opportunities`
-- `contracts`
-- `payments`
-- `commissions`
-- `projects`
-- `files`
-- `services`
-- `reports`
-- `audit`
-- `settings`
-
-## Maquinas de estado usadas nesta rodada
-
-Oportunidade:
-
-- `draft`
-- `pending_approval`
-- `needs_information`
-- `commercial_condition_approved`
-- `awaiting_client_response`
-- `client_requested_revision`
-- `client_accepted`
-- `client_declined`
-
-Contrato:
-
-- `draft_contract`
-- `sent`
-- `signed`
-
-Pagamento:
-
-- `pending`
-- `confirmed`
-
-Comissao:
-
-- `available`
-- `batched`
-- `paid`
-
-Projeto:
-
-- `active`
-- `completed`
-
-Etapa:
-
-- `locked`
-- `ready`
-- `in_progress`
-- `awaiting_client`
-- `completed`
+- Perfis iniciais: `admin_manager` e `sdr`.
+- Ambientes lógicos: `Mada Operação` e `Mada Treinamento` no mesmo Supabase.
+- Autenticação: Supabase Auth com convite, recuperação e MFA para gestores.
+- Dados: tabelas relacionais com UUID, `organization_id`, versão e auditoria.
+- Arquivos: Storage privado, PDF/JPG/PNG, até 10 MB, URLs assinadas por cinco minutos.
+- Concorrência: controle por versão em cada registro; nenhuma gravação global de JSON.
+- Financeiro: pagamentos apenas informativos e comissões lançadas manualmente pelo gestor.
+- Comissão: opções de 5% ou 10%; divergências são alertadas, mas a decisão permanece com o gestor.
+- Deploy definitivo: `https://bystudiomada.vercel.app/portal-mada/`.
+- Escopo inicial: financeiro e projetos continuam sob o perfil Gestor.

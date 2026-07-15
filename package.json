@@ -2,7 +2,22 @@
   "name": "bystudiomada",
   "private": true,
   "version": "1.0.0",
+  "scripts": {
+    "check": "node tools/portal-check.js",
+    "test": "node --test tests/unit/*.test.js",
+    "test:integration": "node --test tests/integration/*.test.js",
+    "test:e2e": "playwright test",
+    "ci": "npm run check && npm test",
+    "portal:backup": "node tools/portal-backup.js",
+    "portal:verify-backup": "node tools/portal-verify-backup.js",
+    "portal:migrate": "node tools/portal-migrate.js",
+    "portal:import": "node tools/portal-import-legacy.js"
+  },
   "dependencies": {
+    "@supabase/supabase-js": "2.110.2",
     "pg": "8.13.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
   }
 }
