@@ -3,11 +3,13 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
+    "build": "node tools/portal-build.js",
     "check": "node tools/portal-check.js",
     "test": "node --test tests/unit/*.test.js",
     "test:integration": "node --test tests/integration/*.test.js",
     "test:e2e": "playwright test",
     "ci": "npm run check && npm test",
+    "vercel-build": "npm run ci && npm run build",
     "portal:backup": "node tools/portal-backup.js",
     "portal:verify-backup": "node tools/portal-verify-backup.js",
     "portal:migrate": "node tools/portal-migrate.js",
