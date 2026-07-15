@@ -11,7 +11,7 @@ Os ambientes usam o mesmo projeto Supabase, mas todos os registros possuem `orga
 
 ## Configuração obrigatória na Vercel
 
-Consulte `.env.example`. `SUPABASE_SERVICE_ROLE_KEY` e `DATABASE_URL` são segredos exclusivamente de servidor. A publishable key pode ser usada no cliente, mas o portal atual acessa o Supabase por APIs próprias.
+Consulte `.env.example`. `SUPABASE_SECRET_KEY` e `DATABASE_URL` são segredos exclusivamente de servidor. A publishable key pode ser usada no cliente, mas o portal atual acessa o Supabase por APIs próprias.
 
 ## Comandos
 

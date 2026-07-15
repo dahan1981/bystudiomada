@@ -77,8 +77,8 @@ async function main() {
     const storageDir = path.join(outputDir, `portal-mada-${backupStamp}.storage`);
     const requireStorage = process.argv.includes("--require-storage");
     const storageFiles = [];
-    if (storageInventory.rows.length && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      if (requireStorage) throw new Error("SUPABASE_SERVICE_ROLE_KEY is required to back up private Storage objects");
+    if (storageInventory.rows.length && !process.env.SUPABASE_SECRET_KEY && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      if (requireStorage) throw new Error("SUPABASE_SECRET_KEY is required to back up private Storage objects");
     } else if (storageInventory.rows.length) {
       const admin = createAdminClient();
       fs.mkdirSync(storageDir, { recursive: true, mode: 0o700 });

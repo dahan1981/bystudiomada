@@ -10,8 +10,8 @@
 
 ## Variáveis e segredos
 
-- Nunca salvar `DATABASE_URL` ou `SUPABASE_SERVICE_ROLE_KEY` no Git.
-- A service role é usada somente por `api/portal-users.js` para convites e desativação.
+- Nunca salvar `DATABASE_URL` ou `SUPABASE_SECRET_KEY` no Git.
+- A secret key é usada somente no servidor para convites, desativação e rotinas administrativas.
 - Ao trocar a senha do banco, atualizar a variável sensível na Vercel e validar a conexão antes de encerrar a janela de manutenção.
 - A conexão Pooler não deve ser usada para `ALTER ROLE` quando o Supabase recusar a operação; nesse caso, fazer a rotação pelo painel ou Management API e então atualizar `DATABASE_URL`.
 - Rotacionar imediatamente qualquer segredo compartilhado por chat, e-mail ou arquivo não protegido.
@@ -21,7 +21,7 @@
 - RPO: até 24 horas. RTO alvo: 4 horas.
 - Gerar backup lógico semanal e antes de toda migration.
 - Guardar o JSON, checksum e a pasta `.storage` em armazenamento externo privado.
-- O gate de produção deve usar `node tools/portal-backup.js --require-storage` com `SUPABASE_SERVICE_ROLE_KEY` disponível somente no ambiente seguro.
+- O gate de produção deve usar `node tools/portal-backup.js --require-storage` com `SUPABASE_SECRET_KEY` disponível somente no ambiente seguro.
 - Validar o conjunto com `node tools/portal-verify-backup.js <backup.json>`; o comando confere também os hashes dos objetos privados.
 
 ## Recuperação
