@@ -21,6 +21,39 @@ test("login screen does not overflow the viewport", async ({ page }) => {
   await page.goto("/portal-mada/");
   const dimensions = await page.evaluate(() => ({ width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
   expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.width);
+  await expect(page.locator('img.brand-logo[src="./assets/mada-logo.jpeg"]')).toBeVisible();
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "./assets/mada-icon.svg");
+});
+
+test("primary routes and workspaces do not overflow the viewport", async ({ page, request }) => {
+  test.setTimeout(60_000);
+  await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });
+  await page.goto("/api/e2e-login");
+
+  const routes = [
+    "dashboard", "opportunities", "progress", "approvals", "contracts", "payments",
+    "commissions", "files", "reports", "projects", "services", "audit", "settings",
+  ];
+
+  for (const route of routes) {
+    await goToRoute(page, route);
+    const dimensions = await page.evaluate(() => ({
+      width: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      contentRight: Math.round(document.querySelector(".content")?.getBoundingClientRect().right || 0),
+    }));
+    expect(dimensions.scrollWidth, `${route} created page overflow`).toBeLessThanOrEqual(dimensions.width);
+    expect(dimensions.contentRight, `${route} exceeded the viewport`).toBeLessThanOrEqual(dimensions.width + 1);
+  }
+
+  await goToRoute(page, "opportunities");
+  await page.locator("[data-new-opportunity]").first().click();
+  const workspace = await page.evaluate(() => {
+    const panel = document.querySelector("[data-drawer-panel]");
+    return panel ? { clientWidth: panel.clientWidth, scrollWidth: panel.scrollWidth } : null;
+  });
+  expect(workspace).not.toBeNull();
+  expect(workspace.scrollWidth).toBeLessThanOrEqual(workspace.clientWidth);
 });
 
 test("manager completes the repaired operational flows", async ({ page, request }) => {

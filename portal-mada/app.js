@@ -1182,6 +1182,10 @@ function renderIcon(name, className = "") {
   return `<i data-lucide="${esc(name)}" class="${esc(className)}" aria-hidden="true"></i>`;
 }
 
+function renderBrandLogo(className = "") {
+  return `<img class="brand-logo${className ? ` ${esc(className)}` : ""}" src="./assets/mada-logo.jpeg" alt="Mada" />`;
+}
+
 function refreshIcons() {
   window.lucide?.createIcons({ attrs: { "stroke-width": 1.8 } });
 }
@@ -1194,7 +1198,7 @@ function render() {
   const app = document.querySelector("#app");
   if (!authReady) {
     app.className = "app-shell";
-    app.innerHTML = `<main class="auth-screen"><section class="auth-loading">${renderIcon("loader-circle")}<strong>Carregando Portal Mada</strong><span>Validando acesso e sincronizando dados.</span></section></main>`;
+    app.innerHTML = `<main class="auth-screen"><section class="auth-loading">${renderBrandLogo("auth-loading-logo")}${renderIcon("loader-circle")}<strong>Carregando Portal Mada</strong><span>Validando acesso e sincronizando dados.</span></section></main>`;
     refreshIcons();
     return;
   }
@@ -1254,7 +1258,7 @@ function renderMfaChallenge() {
   return `
     <main class="auth-screen">
       <section class="auth-card">
-        <div class="auth-brand"><span class="brand-mark">M</span><span>Studio Mada</span></div>
+        <div class="auth-brand">${renderBrandLogo("auth-brand-logo")}<span>Portal Comercial</span></div>
         <form class="auth-form" data-mfa-challenge-form>
           <div class="auth-form-head"><strong>Verificação em duas etapas</strong><span>Digite o código atual do seu aplicativo autenticador.</span></div>
           <label class="field"><span>Código de 6 dígitos</span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></label>
@@ -1294,8 +1298,8 @@ function renderAuth() {
     <main class="auth-screen">
       <section class="auth-card" aria-label="Acesso ao Portal Comercial Mada">
         <div class="auth-brand">
-          <span class="brand-mark">M</span>
-          <span>Studio Mada</span>
+          ${renderBrandLogo("auth-brand-logo")}
+          <span>Portal Comercial</span>
         </div>
         <div class="auth-copy">
           <span class="auth-kicker">Portal interno</span>
@@ -1351,10 +1355,9 @@ function renderSidebar() {
   return `
     <aside class="sidebar ${mobileNavOpen ? "is-open" : ""}" data-sidebar>
       <div class="brand-block">
-        <span class="brand-mark">M</span>
-        <div>
-          <h1 class="brand-title">Studio Mada</h1>
-          <p class="brand-subtitle">Portal Comercial</p>
+        <div class="brand-logo-lockup">
+          ${renderBrandLogo("sidebar-brand-logo")}
+          <span class="brand-subtitle">Portal Comercial</span>
         </div>
       </div>
       <nav class="nav" aria-label="Navegacao interna">
@@ -2969,13 +2972,18 @@ function opportunityFormFields(opportunity = {}) {
       <div class="form-grid">
         <label class="field full"><span>O que vende</span><textarea name="businessOffer">${esc(opportunity.businessOffer)}</textarea></label>
         <label class="field full"><span>Publico</span><textarea name="targetAudience">${esc(opportunity.targetAudience)}</textarea></label>
-        <label class="field">
+        <fieldset class="field choice-field">
           <span>Sinal de operação</span>
-          <select class="multi-select" name="operationSignal" multiple size="5">
-            ${multiSelectOptions(operationSignalOptions, opportunity.operationSignal)}
-          </select>
-          <small>Segure Ctrl para marcar mais de uma opção.</small>
-        </label>
+          <div class="check-grid compact-signal-grid">
+            ${operationSignalOptions.map((option) => `
+              <label class="check-card">
+                <input type="checkbox" name="operationSignal" value="${esc(option)}" ${splitChoiceValue(opportunity.operationSignal).includes(option) ? "checked" : ""} />
+                <span>${esc(option)}</span>
+              </label>
+            `).join("")}
+          </div>
+          <small>Marque todos os sinais que representam o momento do negócio.</small>
+        </fieldset>
         <label class="field">
           <span>Momento atual</span>
           <select name="currentMoment">

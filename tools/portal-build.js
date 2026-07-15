@@ -36,5 +36,6 @@ function copyDirectory(source) {
   "portal-mada/styles.css",
   "portal-mada/app.js",
 ].forEach((file) => copyFile(file));
+copyDirectory("portal-mada/assets");
 
 process.stdout.write(`Static output created at ${output}`);
