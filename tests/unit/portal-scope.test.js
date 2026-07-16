@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { mergeStateForUser, visibleStateForUser } = require("../../lib/portal-scope");
+const { applyMutationSet, mergeStateForUser, visibleStateForUser } = require("../../lib/portal-scope");
 
 function state() {
   return {
@@ -48,4 +48,14 @@ test("SDR cannot alter or restore a manager-rejected opportunity", () => {
   assert.equal(opportunity.status, "rejected");
   assert.equal(opportunity.archivedAt, "2026-07-15T12:00:00.000Z");
   assert.equal(opportunity.clientName, "Cliente bloqueado");
+});
+
+test("mutation set preserves unrelated records changed by another manager", () => {
+  const current = state();
+  current.opportunities[1].suggestedAmountCents = 250_000;
+  const staleIncoming = state();
+  staleIncoming.opportunities[0].suggestedAmountCents = 150_000;
+  const result = applyMutationSet(current, staleIncoming, { opportunities: ["opp-a"] });
+  assert.equal(result.opportunities.find((item) => item.id === "opp-a").suggestedAmountCents, 150_000);
+  assert.equal(result.opportunities.find((item) => item.id === "opp-b").suggestedAmountCents, 250_000);
 });

@@ -1,6 +1,7 @@
 const { getPortalSession, isSameOrigin } = require("../lib/portal-auth-session");
 const { dispatchPortalNotificationEmails } = require("../lib/portal-email");
 const { createPublicClient } = require("../lib/supabase-server");
+const { requireManagerMfa, sendApiError } = require("../lib/portal-http");
 
 function bodyOf(request) {
   return typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
@@ -34,6 +35,9 @@ module.exports = async function handler(request, response) {
       return;
     }
     const body = bodyOf(request);
+    if (["review_opportunity", "mark_notification_read"].includes(body.action) && session.user.role === "admin_manager") {
+      requireManagerMfa(session);
+    }
     const opportunityId = String(body.opportunityId || "");
     const supabase = createPublicClient(session.accessToken);
     let result;
@@ -72,9 +76,6 @@ module.exports = async function handler(request, response) {
     });
     response.status(200).json({ data: result.data ?? null });
   } catch (error) {
-    response.status(error.statusCode || 500).json({
-      error: error.statusCode ? error.message : "Workflow persistence unavailable",
-      detail: error.statusCode ? undefined : error.message,
-    });
+    sendApiError(request, response, error, "Não foi possível concluir esta ação.", { context: "Portal workflow failed" });
   }
 };

@@ -21,7 +21,7 @@ function createTestState() {
   ];
   const opportunities = [
     {
-      id: "opp-approval", sdrId: "sdr-1", clientName: "Cliente Aprovacao", brandName: "Marca Aprovacao",
+      id: "opp-approval", sdrId: "sdr-1", clientName: "Cliente Aprovação", brandName: "Marca Aprovação",
       serviceId: "srv-branding", serviceIds: ["srv-branding"], crmStatus: "negotiating", status: "pending_approval",
       suggestedAmountCents: 500000, suggestedDiscountPercent: 0, suggestedDiscountCents: 0,
       requestedConditions: "50_50", suggestedPaymentTerms: "50_50", nextAction: "Preparar proposta", nextActionDate: "2026-07-20",
@@ -58,7 +58,7 @@ function createTestState() {
       name: "Site Cliente Financeiro", status: "active", targetEndAt: "2026-09-01", currentStageId: "stg-1", _version: 1,
       stages: [{ id: "stg-1", sequenceNumber: 1, name: "Briefing", status: "in_progress", responsibleManagerId: "manager-1", dueAt: "2026-07-22", _version: 1 }], events: [],
     }],
-    notifications: [{ id: "notification-1", recipientUserId: "manager-1", createdBy: "sdr-1", kind: "approval", title: "Nova aprovacao", text: "Cliente Aprovacao aguarda analise.", entityType: "opportunity", entityId: "opp-approval", read: false, createdAt: now }],
+    notifications: [{ id: "notification-1", recipientUserId: "manager-1", createdBy: "sdr-1", kind: "approval", title: "Nova aprovação", text: "Cliente Aprovação aguarda análise.", entityType: "opportunity", entityId: "opp-approval", read: false, createdAt: now }],
   };
 }
 

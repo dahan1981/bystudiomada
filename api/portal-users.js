@@ -1,6 +1,8 @@
 const { getPortalSession, isSameOrigin } = require("../lib/portal-auth-session");
 const { withClient } = require("../lib/portal-db");
 const { createAdminClient, createPublicClient } = require("../lib/supabase-server");
+const { requireManagerMfa, sendApiError } = require("../lib/portal-http");
+const { sendSdrInvitationEmail } = require("../lib/portal-email");
 
 function bodyOf(request) {
   return typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
@@ -31,6 +33,7 @@ module.exports = async function handler(request, response) {
       response.status(403).json({ error: "Apenas o gestor pode administrar contas." });
       return;
     }
+    requireManagerMfa(session);
     const body = bodyOf(request);
     const admin = createAdminClient();
 
@@ -41,16 +44,21 @@ module.exports = async function handler(request, response) {
         response.status(400).json({ error: "Informe nome e e-mail da SDR." });
         return;
       }
-      const invitation = await admin.auth.admin.inviteUserByEmail(email, {
-        data: { display_name: name },
-        redirectTo: `${portalOrigin(request)}/portal-mada/`,
+      const invitation = await admin.auth.admin.generateLink({
+        type: "invite",
+        email,
+        options: {
+          data: { display_name: name },
+          redirectTo: `${portalOrigin(request)}/portal-mada/?mode=invite`,
+        },
       });
-      if (invitation.error || !invitation.data.user) {
-        response.status(400).json({ error: invitation.error?.message || "Não foi possível enviar o convite." });
+      if (invitation.error || !invitation.data.user || !invitation.data.properties?.action_link) {
+        response.status(400).json({ error: invitation.error?.message || "Não foi possível gerar o convite." });
         return;
       }
       const invitedUser = invitation.data.user;
       try {
+        await sendSdrInvitationEmail({ recipientName: name, recipientEmail: email, actionLink: invitation.data.properties.action_link });
         await withClient(async (client) => {
           await client.query("begin");
           try {
@@ -148,9 +156,6 @@ module.exports = async function handler(request, response) {
 
     response.status(400).json({ error: "Ação de conta inválida." });
   } catch (error) {
-    response.status(error.statusCode || 500).json({
-      error: error.statusCode ? error.message : "User management unavailable",
-      detail: error.statusCode ? undefined : error.message,
-    });
+    sendApiError(request, response, error, "Não foi possível administrar a conta.", { context: "Portal user management failed" });
   }
 };

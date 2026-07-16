@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const { getPortalSession, isSameOrigin } = require("../lib/portal-auth-session");
 const { createPublicClient } = require("../lib/supabase-server");
+const { requireManagerMfa, sendApiError } = require("../lib/portal-http");
 
 const BUCKET = "portal-documents";
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -47,30 +48,45 @@ module.exports = async function handler(request, response) {
       return;
     }
 
+    const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
     if (session.user.role !== "admin_manager") {
       response.status(403).json({ error: "Apenas o gestor pode anexar arquivos financeiros e comerciais." });
       return;
     }
-    const body = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
+    requireManagerMfa(session);
     const filename = String(body.filename || "").trim();
     const mimeType = String(body.mimeType || "");
     const metadata = body.metadata || {};
-    const buffer = Buffer.from(String(body.contentBase64 || ""), "base64");
-    if (!filename || !buffer.length || !ALLOWED_MIME_TYPES.has(mimeType)) {
+    const sizeBytes = Number(body.sizeBytes || 0);
+    if (!filename || !sizeBytes || !ALLOWED_MIME_TYPES.has(mimeType)) {
       response.status(400).json({ error: "Envie um arquivo PDF, JPG ou PNG válido." });
       return;
     }
-    if (buffer.length > MAX_FILE_SIZE) {
+    if (sizeBytes > MAX_FILE_SIZE) {
       response.status(413).json({ error: "O arquivo excede o limite de 10 MB." });
       return;
     }
 
-    const id = crypto.randomUUID();
+    const action = body.action || "prepare";
+    const id = String(body.uploadId || crypto.randomUUID());
     const kind = safeSegment(metadata.kind || "general");
     const entityId = safeSegment(metadata.opportunityId || metadata.contractId || metadata.paymentId || metadata.payoutBatchId || "unlinked");
     const storagePath = `${session.user.organizationId}/${kind}/${entityId}/${id}-${safeSegment(filename, "arquivo")}`;
-    const upload = await supabase.storage.from(BUCKET).upload(storagePath, buffer, { contentType: mimeType, upsert: false });
-    if (upload.error) throw upload.error;
+    if (action === "prepare") {
+      const signed = await supabase.storage.from(BUCKET).createSignedUploadUrl(storagePath, { upsert: false });
+      if (signed.error || !signed.data?.signedUrl) throw signed.error || new Error("Não foi possível preparar o envio privado.");
+      response.status(200).json({ uploadId: id, storagePath, signedUrl: signed.data.signedUrl, expiresIn: 600 });
+      return;
+    }
+    if (action !== "complete" || String(body.storagePath || "") !== storagePath) {
+      response.status(400).json({ error: "Envio de arquivo inválido ou expirado." });
+      return;
+    }
+    const probe = await supabase.storage.from(BUCKET).createSignedUrl(storagePath, 60);
+    if (probe.error || !probe.data?.signedUrl) {
+      response.status(400).json({ error: "O arquivo não foi encontrado no armazenamento privado." });
+      return;
+    }
 
     const inserted = await supabase.from("files").insert({
       id,
@@ -79,7 +95,7 @@ module.exports = async function handler(request, response) {
       display_name: filename,
       storage_path: storagePath,
       mime_type: mimeType,
-      size_bytes: buffer.length,
+      size_bytes: sizeBytes,
       opportunity_id: metadata.opportunityId || null,
       contract_id: metadata.contractId || null,
       payment_id: metadata.paymentId || null,
@@ -92,11 +108,8 @@ module.exports = async function handler(request, response) {
       await supabase.storage.from(BUCKET).remove([storagePath]);
       throw inserted.error;
     }
-    response.status(201).json({ id, filename, mimeType, sizeBytes: buffer.length, storagePath });
+    response.status(201).json({ id, filename, mimeType, sizeBytes, storagePath });
   } catch (error) {
-    response.status(error.statusCode || 500).json({
-      error: error.statusCode ? error.message : "Attachment persistence unavailable",
-      detail: error.statusCode ? undefined : error.message,
-    });
+    sendApiError(request, response, error, "Não foi possível salvar o arquivo.", { context: "Portal file failed" });
   }
 };

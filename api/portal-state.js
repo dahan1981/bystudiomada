@@ -2,6 +2,7 @@ const { getPortalSession, isSameOrigin } = require("../lib/portal-auth-session")
 const { withClient } = require("../lib/portal-db");
 const { dispatchPortalNotificationEmails } = require("../lib/portal-email");
 const { readRelationalState, writeRelationalState } = require("../lib/portal-relational");
+const { requireManagerMfa, sendApiError } = require("../lib/portal-http");
 
 module.exports = async function handler(request, response) {
   response.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -23,21 +24,20 @@ module.exports = async function handler(request, response) {
       return;
     }
     if (request.method === "GET") {
+      requireManagerMfa(session);
       const data = await withClient((client) => readRelationalState(client, session));
       response.status(200).json({ data, workspace: data.activeWorkspace });
       return;
     }
 
+    requireManagerMfa(session);
     const payload = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
-    const data = await withClient((client) => writeRelationalState(client, payload.data || {}, session));
+    const data = await withClient((client) => writeRelationalState(client, payload.data || {}, session, payload.mutations || null));
     await dispatchPortalNotificationEmails(session.user.organizationId).catch((error) => {
       console.error("Portal notification dispatch unavailable", { message: error.message });
     });
     response.status(200).json({ data, workspace: data.activeWorkspace });
   } catch (error) {
-    response.status(error.statusCode || 500).json({
-      error: error.statusCode ? error.message : "Portal persistence unavailable",
-      detail: error.statusCode ? undefined : error.message,
-    });
+    sendApiError(request, response, error, "Não foi possível salvar os dados do portal.", { context: "Portal state failed" });
   }
 };

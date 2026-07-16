@@ -1,4 +1,3 @@
-const STORAGE_KEY = "mada.portal.mvp.v1";
 const SUPABASE_CONFIG = {
   url: "https://nbjeggofsqsavniuijxz.supabase.co",
   endpoint: "/api/portal-state",
@@ -8,15 +7,15 @@ const SUPABASE_CONFIG = {
 const workflowTemplate = [
   "Briefing",
   "Onboarding",
-  "Reuniao de kickoff",
-  "Pesquisa e diagnostico",
-  "Apresentacao da estrategia",
-  "Direcao criativa e moodboard",
+  "Reunião de kickoff",
+  "Pesquisa e diagnóstico",
+  "Apresentação da estratégia",
+  "Direção criativa e moodboard",
   "Desenvolvimento da identidade",
-  "Apresentacao da identidade",
+  "Apresentação da identidade",
   "Feedback consolidado",
   "Ajustes e revisoes",
-  "Aprovacao final",
+  "Aprovação final",
   "Pagamento restante",
   "Entrega e implementacao",
   "Suporte e encerramento",
@@ -170,7 +169,7 @@ const statusLabels = {
   draft: "Rascunho",
   pending_approval: "Aguardando aprovação",
   needs_information: "Mais informações",
-  commercial_condition_approved: "Condicao aprovada",
+  commercial_condition_approved: "Condição aprovada",
   presented_to_client: "Apresentada ao cliente",
   awaiting_client_response: "Aguardando cliente",
   client_requested_revision: "Cliente pediu alteração",
@@ -189,7 +188,7 @@ const statusLabels = {
   signed: "Assinado",
   pending: "Registrado",
   confirmed: "Confirmado",
-  available: "Disponivel",
+  available: "Disponível",
   batched: "Em lote",
   paid: "Pago",
   active: "Ativo",
@@ -215,7 +214,7 @@ const crmStatusLabels = {
   first_contact: "Primeiro contato",
   follow_up: "Em follow-up",
   replied: "Respondeu",
-  manager_meeting: "Reuniao dos gestores com o cliente",
+  manager_meeting: "Reunião dos gestores com o cliente",
   proposal_sent_crm: "Proposta enviada",
   negotiating: "Em negociação",
   awaiting_contract_payment: "Aguardando contrato/pagamento",
@@ -278,12 +277,12 @@ const nextActionOptions = [
   "Fazer primeiro contato",
   "Fazer follow-up",
   "Aguardar resposta do cliente",
-  "Agendar reuniao",
-  "Realizar reuniao com gestores",
+  "Agendar reunião",
+  "Realizar reunião com gestores",
   "Preparar proposta",
   "Enviar proposta",
-  "Negociar condicoes",
-  "Enviar condicao para aprovacao",
+  "Negociar condições",
+  "Enviar condição para aprovação",
   "Cobrar assinatura do contrato",
   "Confirmar pagamento",
   "Iniciar projeto",
@@ -308,11 +307,11 @@ const crmSpecialStatuses = ["nurturing", "lost"];
 const nextActionSuggestions = {
   lead_mapped: ["Mapear contato e contexto", "Fazer primeiro contato"],
   first_contact: ["Fazer follow-up", "Aguardar resposta do cliente"],
-  follow_up: ["Fazer follow-up", "Aguardar resposta do cliente", "Agendar reuniao"],
-  replied: ["Agendar reuniao", "Realizar reuniao com gestores"],
-  manager_meeting: ["Preparar proposta", "Enviar condicao para aprovacao"],
-  proposal_sent_crm: ["Fazer follow-up", "Negociar condicoes"],
-  negotiating: ["Preparar proposta", "Negociar condicoes", "Enviar condicao para aprovacao"],
+  follow_up: ["Fazer follow-up", "Aguardar resposta do cliente", "Agendar reunião"],
+  replied: ["Agendar reunião", "Realizar reunião com gestores"],
+  manager_meeting: ["Preparar proposta", "Enviar condição para aprovação"],
+  proposal_sent_crm: ["Fazer follow-up", "Negociar condições"],
+  negotiating: ["Preparar proposta", "Negociar condições", "Enviar condição para aprovação"],
   awaiting_contract_payment: ["Cobrar assinatura do contrato", "Confirmar pagamento"],
   sale_completed: ["Iniciar projeto"],
   nurturing: ["Retomar nutricao", "Fazer follow-up"],
@@ -382,11 +381,15 @@ let commandMenuOpen = false;
 let toastTimer = null;
 let mobileNavOpen = false;
 let mfaEnrollment = null;
-let supabaseSyncStatus = "Cache local";
+let lastSyncedState = normalizeState(seedState());
+let supabaseSyncStatus = "Conectando ao Supabase";
 let supabaseSyncInFlight = false;
 let supabaseSyncQueued = false;
 let supabaseSyncPromise = Promise.resolve();
 let supabaseSyncReady = false;
+let supabaseRetryTimer = null;
+let supabaseRetryDelay = 2000;
+let pendingSuccessToast = "";
 
 function attachmentUrl(id) {
   return id ? `/api/portal-file?id=${encodeURIComponent(id)}` : "";
@@ -395,15 +398,6 @@ function attachmentUrl(id) {
 function attachmentLink(id, label) {
   if (!id) return esc(label || "-");
   return `<a href="${esc(attachmentUrl(id))}" target="_blank" rel="noreferrer">${esc(label || "Abrir arquivo")}</a>`;
-}
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || "").split(",")[1] || "");
-    reader.onerror = () => reject(reader.error || new Error("Falha ao ler arquivo."));
-    reader.readAsDataURL(file);
-  });
 }
 
 async function uploadPortalAttachment(file, metadata = {}) {
@@ -416,20 +410,41 @@ async function uploadPortalAttachment(file, metadata = {}) {
     toast("Envie um arquivo PDF, JPG ou PNG.");
     return null;
   }
-  const id = uid("att");
-  const response = await fetch("/api/portal-file", {
+  const preparedResponse = await fetch("/api/portal-file", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      id,
+      action: "prepare",
       filename: file.name,
       mimeType: file.type || "application/octet-stream",
-      contentBase64: await fileToBase64(file),
+      sizeBytes: file.size,
       metadata,
     }),
   });
-  if (!response.ok) throw new Error(await response.text());
-  return response.json();
+  const prepared = await preparedResponse.json().catch(() => ({}));
+  if (!preparedResponse.ok) throw new Error(prepared.error || "Não foi possível preparar o envio do arquivo.");
+  const uploadResponse = await fetch(prepared.signedUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type, "x-upsert": "false" },
+    body: file,
+  });
+  if (!uploadResponse.ok) throw new Error("Não foi possível enviar o arquivo ao armazenamento privado.");
+  const completedResponse = await fetch("/api/portal-file", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      action: "complete",
+      uploadId: prepared.uploadId,
+      storagePath: prepared.storagePath,
+      filename: file.name,
+      mimeType: file.type,
+      sizeBytes: file.size,
+      metadata,
+    }),
+  });
+  const completed = await completedResponse.json().catch(() => ({}));
+  if (!completedResponse.ok) throw new Error(completed.error || "Não foi possível registrar o arquivo enviado.");
+  return completed;
 }
 
 function seedState() {
@@ -448,17 +463,6 @@ function seedState() {
     notifications: [],
     auditLogs: [],
   };
-}
-
-function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return normalizeState(seedState());
-  try {
-    const parsed = JSON.parse(raw);
-    return normalizeState({ ...seedState(), ...parsed });
-  } catch {
-    return normalizeState(seedState());
-  }
 }
 
 function normalizeState(data) {
@@ -614,20 +618,40 @@ function normalizeState(data) {
           dueAt: addDays(7 * (index + 1)),
           events: [],
         })),
-        events: [event("project_created_from_approval", "Projeto criado automaticamente apos aprovacao da condicao comercial e abertura de contrato", actorId)],
+        events: [event("project_created_from_approval", "Projeto criado automaticamente após aprovação da condição comercial e abertura de contrato", actorId)],
       });
     });
 
   return data;
 }
 
-function saveLocalState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+function cloneState(value) {
+  return JSON.parse(JSON.stringify(value || seedState()));
 }
 
 function saveState() {
-  saveLocalState();
   return queueSupabaseSave();
+}
+
+const persistedCollections = [
+  "opportunities", "conditions", "contracts", "payments", "commissions",
+  "payoutBatches", "projects", "files", "notifications", "auditLogs",
+];
+
+function comparableEntity(entity) {
+  const copy = cloneState(entity);
+  delete copy._version;
+  return copy;
+}
+
+function buildMutationSet(before, after) {
+  return Object.fromEntries(persistedCollections.map((collection) => {
+    const previous = new Map((before?.[collection] || []).map((item) => [item.id, JSON.stringify(comparableEntity(item))]));
+    const changedIds = (after?.[collection] || [])
+      .filter((item) => previous.get(item.id) !== JSON.stringify(comparableEntity(item)))
+      .map((item) => item.id);
+    return [collection, changedIds];
+  }).filter(([, ids]) => ids.length));
 }
 
 async function initSupabaseSync() {
@@ -647,7 +671,7 @@ async function initSupabaseSync() {
     const row = await response.json();
     if (row?.data) {
       state = normalizeState({ ...seedState(), ...row.data });
-      saveLocalState();
+      lastSyncedState = cloneState(state);
       supabaseSyncReady = true;
       supabaseSyncStatus = "Sincronizado com Supabase";
       authReady = true;
@@ -669,9 +693,13 @@ async function initSupabaseSync() {
 }
 
 function queueSupabaseSave() {
-  if (!SUPABASE_CONFIG.endpoint || !supabaseSyncReady) return Promise.resolve();
   supabaseSyncQueued = true;
   supabaseSyncStatus = "Salvando alterações";
+  updateSyncIndicator();
+  if (!SUPABASE_CONFIG.endpoint || !supabaseSyncReady) {
+    scheduleSupabaseRetry();
+    return Promise.resolve(false);
+  }
   supabaseSyncPromise = supabaseSyncPromise.then(async () => {
     if (!supabaseSyncQueued) return;
     supabaseSyncQueued = false;
@@ -683,14 +711,25 @@ function queueSupabaseSave() {
 async function flushSupabaseSave() {
   if (supabaseSyncInFlight) return;
   supabaseSyncInFlight = true;
+  supabaseSyncQueued = false;
   try {
     await pushSupabaseState();
     supabaseSyncStatus = "Sincronizado com Supabase";
+    supabaseSyncReady = true;
+    supabaseRetryDelay = 2000;
+    clearTimeout(supabaseRetryTimer);
+    supabaseRetryTimer = null;
+    if (pendingSuccessToast) {
+      const message = pendingSuccessToast;
+      pendingSuccessToast = "";
+      showToast(message);
+    }
   } catch (error) {
     if (error.code === "STATE_CONFLICT") {
       supabaseSyncQueued = false;
       supabaseSyncReady = true;
-      toast("Os dados mudaram em outro acesso. A versão mais recente foi carregada; repita a última ação.");
+      pendingSuccessToast = "";
+      showToast("Os dados mudaram em outro acesso. A versão mais recente foi carregada; repita a última ação.");
       await initSupabaseSync();
       return;
     }
@@ -698,10 +737,29 @@ async function flushSupabaseSave() {
     supabaseSyncReady = false;
     supabaseSyncStatus = "Supabase pendente: falha ao salvar";
     console.warn("Supabase save unavailable", error);
+    pendingSuccessToast = "";
+    showToast("As alterações ainda não foram salvas. O portal tentará novamente automaticamente.");
+    scheduleSupabaseRetry();
   } finally {
     supabaseSyncInFlight = false;
     updateSyncIndicator();
   }
+}
+
+function scheduleSupabaseRetry() {
+  if (supabaseRetryTimer || !currentUser) return;
+  supabaseRetryTimer = setTimeout(async () => {
+    supabaseRetryTimer = null;
+    try {
+      const response = await fetch(SUPABASE_CONFIG.endpoint, { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error("Supabase indisponível");
+      supabaseSyncReady = true;
+      await flushSupabaseSave();
+    } catch {
+      supabaseRetryDelay = Math.min(60000, supabaseRetryDelay * 2);
+      scheduleSupabaseRetry();
+    }
+  }, supabaseRetryDelay);
 }
 
 function updateSyncIndicator() {
@@ -714,11 +772,15 @@ function updateSyncIndicator() {
 }
 
 async function pushSupabaseState() {
+  const snapshot = cloneState(state);
+  const mutations = buildMutationSet(lastSyncedState, snapshot);
+  if (!Object.keys(mutations).length) return;
   const response = await fetch(SUPABASE_CONFIG.endpoint, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      data: state,
+      data: snapshot,
+      mutations,
     }),
   });
   const payload = await response.json().catch(() => ({}));
@@ -729,7 +791,7 @@ async function pushSupabaseState() {
   }
   if (payload.data) {
     state = normalizeState({ ...seedState(), ...payload.data });
-    saveLocalState();
+    lastSyncedState = cloneState(state);
   }
 }
 
@@ -876,7 +938,7 @@ function selectOptions(options, selectedValue = "", placeholder = "Selecione") {
 }
 
 function nextActionSelectOptions(selectedValue = "") {
-  return selectOptions(nextActionOptions, selectedValue, "Selecione a proxima acao");
+  return selectOptions(nextActionOptions, selectedValue, "Selecione a próxima acao");
 }
 
 function multiSelectOptions(options, selectedValue = "") {
@@ -1025,7 +1087,7 @@ function recentActivityText(item) {
   return descriptions[item.action] || `Uma atualização${opportunityTarget} foi registrada`;
 }
 
-function addNotification(text, { recipientUserId = null, recipientRole = null, title = "Atualizacao", kind = "info", entityType = null, entityId = null } = {}) {
+function addNotification(text, { recipientUserId = null, recipientRole = null, title = "Atualização", kind = "info", entityType = null, entityId = null } = {}) {
   const roleRecipients = recipientRole
     ? state.users.filter((user) => user.role === recipientRole && user.active !== false && user.id !== currentUser?.id).map((user) => user.id)
     : [];
@@ -1308,7 +1370,7 @@ const metricIconAliases = {
 };
 
 function routeLabel(route) {
-  const secondaryLabels = { archived: "Oportunidades arquivadas", notifications: "Notificacoes" };
+  const secondaryLabels = { archived: "Oportunidades arquivadas", notifications: "Notificações" };
   return navItems.find(([itemRoute]) => itemRoute === route)?.[1] || secondaryLabels[route] || "Dashboard";
 }
 
@@ -1376,7 +1438,7 @@ function render() {
         <div class="topbar-actions">
           <span class="topbar-sync ${supabaseSyncReady ? "is-online" : ""}" title="${esc(supabaseSyncStatus)}"><i></i><span>${supabaseSyncStatus === "Salvando alterações" ? "Salvando" : "Dados salvos"}</span></span>
           <button class="button topbar-create" type="button" data-new-opportunity aria-label="Nova oportunidade">${renderIcon("plus")}<span>Nova oportunidade</span></button>
-          <button class="notification icon-button" type="button" data-route="notifications" aria-label="Notificacoes">
+          <button class="notification icon-button" type="button" data-route="notifications" aria-label="Notificações">
             ${renderIcon("bell")}
             <span>${visibleNotifications().filter((item) => !item.read).length}</span>
           </button>
@@ -1393,30 +1455,66 @@ function render() {
 }
 
 function renderMfaChallenge() {
+  const enrollment = !currentUser.mfaEnrolled;
   return `
     <main class="auth-screen">
       <section class="auth-card">
         <div class="auth-brand">${renderBrandLogo("auth-brand-logo")}<span>Portal Comercial</span></div>
-        <form class="auth-form" data-mfa-challenge-form>
-          <div class="auth-form-head"><strong>Verificação em duas etapas</strong><span>Digite o código atual do seu aplicativo autenticador.</span></div>
-          <label class="field"><span>Código de 6 dígitos</span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></label>
-          <button class="button" type="submit">Verificar ${renderIcon("shield-check")}</button>
-          <div class="auth-error" data-mfa-error hidden></div>
-        </form>
+        ${enrollment ? `
+          <div class="auth-form" data-mfa-required-enrollment>
+            <div class="auth-form-head"><strong>Proteja sua conta de gestor</strong><span>A verificação em duas etapas é obrigatória antes de acessar os dados do portal.</span></div>
+            ${mfaEnrollment ? `
+              <div class="mfa-enrollment">
+                <img src="${esc(mfaEnrollment.qrCode)}" alt="QR Code para configurar o aplicativo autenticador" />
+                <p>Escaneie o QR Code no seu aplicativo autenticador e confirme o código gerado.</p>
+                <code>${esc(mfaEnrollment.secret)}</code>
+              </div>
+              <form class="auth-form" data-mfa-challenge-form data-enrollment-factor="${esc(mfaEnrollment.factorId)}">
+                <label class="field"><span>Código de 6 dígitos</span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></label>
+                <button class="button" type="submit">Ativar e continuar ${renderIcon("shield-check")}</button>
+                <div class="auth-error" data-mfa-error hidden></div>
+              </form>
+            ` : `<button class="button" type="button" data-mfa-required-start>Configurar aplicativo autenticador ${renderIcon("shield-check")}</button>`}
+          </div>
+        ` : `
+          <form class="auth-form" data-mfa-challenge-form>
+            <div class="auth-form-head"><strong>Verificação em duas etapas</strong><span>Digite o código atual do seu aplicativo autenticador.</span></div>
+            <label class="field"><span>Código de 6 dígitos</span><input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></label>
+            <button class="button" type="submit">Verificar ${renderIcon("shield-check")}</button>
+            <div class="auth-error" data-mfa-error hidden></div>
+          </form>
+        `}
       </section>
     </main>
   `;
 }
 
 function bindMfaChallenge() {
+  document.querySelector("[data-mfa-required-start]")?.addEventListener("click", async (event) => {
+    event.currentTarget.disabled = true;
+    try {
+      mfaEnrollment = await postPortal("/api/portal-auth", { action: "mfa_enroll" });
+      render();
+    } catch (error) {
+      showToast(error.message);
+      event.currentTarget.disabled = false;
+    }
+  });
   document.querySelector("[data-mfa-challenge-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     const errorBox = document.querySelector("[data-mfa-error]");
     try {
-      const factors = await postPortal("/api/portal-auth", { action: "mfa_list" });
-      const factor = factors.factors.find((item) => item.status === "verified") || factors.factors[0];
-      if (!factor) throw new Error("Nenhum autenticador configurado para esta conta.");
-      await postPortal("/api/portal-auth", { action: "mfa_verify", factorId: factor.id, code: new FormData(event.currentTarget).get("code") });
+      const enrollmentFactor = event.currentTarget.dataset.enrollmentFactor;
+      let factorId = enrollmentFactor;
+      if (!factorId) {
+        const factors = await postPortal("/api/portal-auth", { action: "mfa_list" });
+        const factor = factors.factors.find((item) => item.status === "verified") || factors.factors[0];
+        if (!factor) throw new Error("Nenhum autenticador configurado para esta conta.");
+        factorId = factor.id;
+      }
+      await postPortal("/api/portal-auth", { action: "mfa_verify", factorId, code: new FormData(event.currentTarget).get("code") });
+      mfaEnrollment = null;
+      currentUser.mfaEnrolled = true;
       currentUser.mfaRequired = false;
       currentUser.mfaCurrentLevel = "aal2";
       authReady = false;
@@ -1432,6 +1530,7 @@ function bindMfaChallenge() {
 function renderAuth() {
   const recovery = new URLSearchParams(location.hash.replace(/^#/, ""));
   const hasRecoverySession = Boolean(recovery.get("access_token") && recovery.get("refresh_token"));
+  const isInvitation = new URLSearchParams(location.search).get("mode") === "invite" || recovery.get("type") === "invite";
   return `
     <main class="auth-screen">
       <section class="auth-card" aria-label="Acesso ao Portal Comercial Mada">
@@ -1445,11 +1544,11 @@ function renderAuth() {
           <p>Operações comerciais, contratos e projetos em um único ambiente.</p>
         </div>
         ${hasRecoverySession ? `
-        <form class="auth-form" data-complete-recovery-form>
-          <div class="auth-form-head"><strong>Definir nova senha</strong><span>Crie uma senha exclusiva com pelo menos 10 caracteres.</span></div>
+        <form class="auth-form" data-complete-recovery-form data-invitation-mode="${isInvitation ? "true" : "false"}">
+          <div class="auth-form-head"><strong>${isInvitation ? "Criar acesso de SDR" : "Definir nova senha"}</strong><span>${isInvitation ? "Crie sua senha para entrar no Portal Comercial Mada." : "Crie uma senha exclusiva com pelo menos 10 caracteres."}</span></div>
           <label class="field"><span>Nova senha</span><input name="newPassword" type="password" minlength="10" autocomplete="new-password" required /></label>
           <label class="field"><span>Confirmar senha</span><input name="confirmPassword" type="password" minlength="10" autocomplete="new-password" required /></label>
-          <button class="button" type="submit" data-recovery-button>Salvar senha ${renderIcon("arrow-right")}</button>
+          <button class="button" type="submit" data-recovery-button>${isInvitation ? "Criar minha senha" : "Salvar senha"} ${renderIcon("arrow-right")}</button>
           <div class="auth-error" data-auth-error hidden></div>
         </form>
         ` : `
@@ -1648,11 +1747,11 @@ function renderDashboard() {
   return `
     ${pageHead("Dashboard Geral", `Ola, ${esc(currentUser.name)}.`)}
     <div class="grid dashboard-metrics">
-      ${metricCard("Aguardando Aprovacao", m.pendingApprovals, "◴")}
-      ${metricCard("Condicoes Aprovadas", m.approved, "✓")}
+      ${metricCard("Aguardando Aprovação", m.pendingApprovals, "◴")}
+      ${metricCard("Condições Aprovadas", m.approved, "✓")}
       ${metricCard("Vendas Validadas", m.validatedSales, "▤")}
       ${metricCard("Projetos Ativos", m.activeProjects, "▥")}
-      ${metricCard("Comissao Disponivel", brl(m.commissionAvailable), "$")}
+      ${metricCard("Comissão Disponível", brl(m.commissionAvailable), "$")}
       ${metricCard("Receita Recebida", brl(m.received), "$")}
     </div>
     <div class="dashboard-overview">
@@ -1711,8 +1810,8 @@ function renderOpportunityList(items) {
 function renderApprovals() {
   const pending = state.opportunities.filter((item) => item.status === "pending_approval");
   return `
-    ${pageHead("Fila de Aprovacoes", `${pending.length} solicitacao(oes) pendente(s)`)}
-    ${pending.length ? opportunityTable(pending, true) : `<section class="card">${empty("Nenhuma aprovacao pendente", "◷")}</section>`}
+    ${pageHead("Fila de Aprovações", `${pending.length} solicitacao(oes) pendente(s)`)}
+    ${pending.length ? opportunityTable(pending, true) : `<section class="card">${empty("Nenhuma aprovação pendente", "◷")}</section>`}
   `;
 }
 
@@ -1765,8 +1864,8 @@ function renderSdrCommissionOverview() {
     <section class="sdr-commission-section">
       <div class="section-head">
         <div>
-          <h3>Comissoes por SDR</h3>
-          <p>Abra uma SDR para ver o dashboard detalhado de vendas, contratos, lotes e comissoes.</p>
+          <h3>Comissões por SDR</h3>
+          <p>Abra uma SDR para ver o dashboard detalhado de vendas, contratos, lotes e comissões.</p>
         </div>
       </div>
       <div class="grid cards-3">
@@ -1782,8 +1881,8 @@ function renderSdrCommissionOverview() {
                 </div>
               </div>
               <div class="kpi-list">
-                <div class="kpi-row"><span>Comissao total</span><strong>${brl(summary.totalCommissionCents)}</strong></div>
-                <div class="kpi-row"><span>Disponivel</span><strong>${brl(summary.availableCents)}</strong></div>
+                <div class="kpi-row"><span>Comissão total</span><strong>${brl(summary.totalCommissionCents)}</strong></div>
+                <div class="kpi-row"><span>Disponível</span><strong>${brl(summary.availableCents)}</strong></div>
                 <div class="kpi-row"><span>Ciclo atual</span><strong>${summary.cycleCount} de 5</strong></div>
               </div>
               <div class="progress" aria-label="Progresso do ciclo de pagamento">
@@ -1837,7 +1936,7 @@ function renderArchivedOpportunities() {
     ${items.length ? `
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Cliente</th><th>Marca</th><th>Servicos</th><th>SDR</th><th>Status anterior</th><th>Arquivada em</th><th></th></tr></thead>
+          <thead><tr><th>Cliente</th><th>Marca</th><th>Serviços</th><th>SDR</th><th>Status anterior</th><th>Arquivada em</th><th></th></tr></thead>
           <tbody>
             ${items.map((item) => `
               <tr>
@@ -1858,7 +1957,7 @@ function renderArchivedOpportunities() {
           </tbody>
         </table>
       </div>
-    ` : `<section class="card">${empty("Nenhuma oportunidade arquivada", "archive", "Oportunidades arquivadas permanecem para consulta; recusas do gestor nao podem ser restauradas.")}</section>`}
+    ` : `<section class="card">${empty("Nenhuma oportunidade arquivada", "archive", "Oportunidades arquivadas permanecem para consulta; recusas do gestor não podem ser restauradas.")}</section>`}
   `;
 }
 
@@ -1867,8 +1966,8 @@ function renderNotifications() {
   const unread = items.filter((item) => !item.read).length;
   return `
     ${pageHead(
-      "Notificacoes",
-      `${unread} nao lida(s) de ${items.length} notificacao(oes)`,
+      "Notificações",
+      `${unread} não lida(s) de ${items.length} notificação(ões)`,
       unread ? `<button class="button secondary" type="button" data-mark-notifications>${renderIcon("check-check")} Marcar todas como lidas</button>` : ""
     )}
     ${items.length ? `
@@ -1877,8 +1976,8 @@ function renderNotifications() {
           <article class="notification-row ${item.read ? "is-read" : "is-unread"}">
             <span class="notification-kind">${renderIcon(item.kind === "approval" ? "badge-check" : "bell")}</span>
             <div class="notification-copy">
-              <div><strong>${esc(item.title || "Atualizacao")}</strong>${item.read ? "" : `<span class="notification-new">Nova</span>`}</div>
-              <p>${esc(item.text || item.message || "Atualizacao no portal")}</p>
+              <div><strong>${esc(item.title || "Atualização")}</strong>${item.read ? "" : `<span class="notification-new">Nova</span>`}</div>
+              <p>${esc(item.text || item.message || "Atualização no portal")}</p>
               <small>${dateLabel(item.createdAt)}</small>
             </div>
             <div class="notification-actions">
@@ -1888,7 +1987,7 @@ function renderNotifications() {
           </article>
         `).join("")}
       </section>
-    ` : `<section class="card">${empty("Nenhuma notificacao", "bell", "Aprovacoes, contratos, pagamentos e atualizacoes destinadas a voce aparecerao aqui.")}</section>`}
+    ` : `<section class="card">${empty("Nenhuma notificacao", "bell", "Aprovações, contratos, pagamentos e atualizações destinadas a voce aparecerao aqui.")}</section>`}
   `;
 }
 
@@ -2139,11 +2238,11 @@ function opportunityTable(items, approvalMode = false) {
           <tr>
             <th>Cliente</th>
             <th>Marca</th>
-            <th>Servicos</th>
+            <th>Serviços</th>
             <th>SDR</th>
             <th>Valor sugerido</th>
             <th>Status CRM</th>
-            <th>Condicao</th>
+            <th>Condição</th>
             <th>Próxima ação</th>
             <th>Data</th>
             <th></th>
@@ -2187,11 +2286,11 @@ function opportunityTable(items, approvalMode = false) {
 function renderContracts() {
   const rows = state.contracts.filter((contract) => visibleOpportunities().some((opp) => opp.id === contract.opportunityId));
   return `
-    ${pageHead("Contratos", "Formalizacao criada somente a partir de condicao aprovada")}
+    ${pageHead("Contratos", "Formalizacao criada somente a partir de condição aprovada")}
     ${rows.length ? `
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Numero</th><th>Cliente</th><th>Valor</th><th>Status</th><th>Assinatura</th><th></th></tr></thead>
+          <thead><tr><th>Número</th><th>Cliente</th><th>Valor</th><th>Status</th><th>Assinatura</th><th></th></tr></thead>
           <tbody>
             ${rows.map((item) => {
               const opp = byId(state.opportunities, item.opportunityId);
@@ -2235,7 +2334,7 @@ function renderContractsPipeline() {
     ${rows.length ? `
       <div class="table-wrap" style="margin-top:18px">
         <table>
-          <thead><tr><th>Numero</th><th>Cliente</th><th>SDR</th><th>Valor</th><th>Pagamento</th><th>Proposta</th><th>Contrato</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Número</th><th>Cliente</th><th>SDR</th><th>Valor</th><th>Pagamento</th><th>Proposta</th><th>Contrato</th><th>Status</th><th></th></tr></thead>
           <tbody>
             ${rows.map((item) => {
               const opp = byId(state.opportunities, item.opportunityId);
@@ -2273,23 +2372,23 @@ function renderPayments() {
     ${pageHead(
       "Pagamentos",
       currentUser.role === "admin_manager"
-        ? "Controle manual dos valores recebidos fora da plataforma, com vinculo opcional ao CRM"
+        ? "Controle manual dos valores recebidos fora da plataforma, com vínculo opcional ao CRM"
         : "Registros informativos dos pagamentos externos dos seus contratos",
       currentUser.role === "admin_manager" ? `<button class="button" type="button" data-new-payment>${renderIcon("plus")} Novo pagamento</button>` : ""
     )}
     <section class="card notice-card">
       <strong>Registro apenas informativo</strong>
-      <p>Nenhuma cobranca acontece pela plataforma. Registre aqui o que foi pago por Pix, transferencia, boleto, cartao externo ou outro meio. O vinculo com um contrato pode ser feito agora ou depois.</p>
+      <p>Nenhuma cobranca acontece pela plataforma. Registre aqui o que foi pago por Pix, transferência, boleto, cartão externo ou outro meio. O vínculo com um contrato pode ser feito agora ou depois.</p>
     </section>
     <div class="grid cards-3">
       ${metricCard("Recebido confirmado", brl(confirmed), "$")}
       ${metricCard("A confirmar", brl(pending), "$")}
-      ${metricCard("Sem vinculo com CRM", externalCount, "link-2-off")}
+      ${metricCard("Sem vínculo com CRM", externalCount, "link-2-off")}
     </div>
     ${contracts.length ? `
       <div class="table-wrap" style="margin-top:18px">
         <table>
-          <thead><tr><th>Contrato</th><th>Cliente</th><th>Valor contrato</th><th>Recebido</th><th>A confirmar</th><th>Saldo</th><th>Ultimo registro</th><th></th></tr></thead>
+          <thead><tr><th>Contrato</th><th>Cliente</th><th>Valor contrato</th><th>Recebido</th><th>A confirmar</th><th>Saldo</th><th>Último registro</th><th></th></tr></thead>
           <tbody>
             ${contracts.map((contract) => {
               const opp = byId(state.opportunities, contract.opportunityId);
@@ -2315,19 +2414,19 @@ function renderPayments() {
           </tbody>
         </table>
       </div>
-    ` : currentUser.role === "admin_manager" ? `<section class="card" style="margin-top:18px">${empty("Nenhum contrato disponivel", "$", "Ainda assim, voce pode registrar um pagamento manual e vincula-lo ao CRM depois.", `<button class="button" type="button" data-new-payment>${renderIcon("plus")} Registrar pagamento manual</button>`)}</section>` : ""}
+    ` : currentUser.role === "admin_manager" ? `<section class="card" style="margin-top:18px">${empty("Nenhum contrato disponível", "$", "Ainda assim, voce pode registrar um pagamento manual e vincula-lo ao CRM depois.", `<button class="button" type="button" data-new-payment>${renderIcon("plus")} Registrar pagamento manual</button>`)}</section>` : ""}
     ${rows.length ? `
       <h3 style="margin-top:28px">Historico de pagamentos</h3>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Vinculo</th><th>Cliente / origem</th><th>Tipo</th><th>Valor</th><th>Metodo</th><th>Pagador / referencia</th><th>Comprovante</th><th>Status</th><th>Data</th><th>Observacao</th><th></th></tr></thead>
+          <thead><tr><th>Vínculo</th><th>Cliente / origem</th><th>Tipo</th><th>Valor</th><th>Método</th><th>Pagador / referência</th><th>Comprovante</th><th>Status</th><th>Data</th><th>Observação</th><th></th></tr></thead>
           <tbody>
             ${rows.map((item) => {
               const contract = byId(state.contracts, item.contractId);
               const opportunity = contract && byId(state.opportunities, contract.opportunityId);
               return `
                 <tr>
-                  <td>${contract ? `<span class="link-status linked">${renderIcon("link-2")} ${esc(contract.contractNumber)}</span>` : `<span class="link-status external">${renderIcon("link-2-off")} Sem vinculo</span>`}</td>
+                  <td>${contract ? `<span class="link-status linked">${renderIcon("link-2")} ${esc(contract.contractNumber)}</span>` : `<span class="link-status external">${renderIcon("link-2-off")} Sem vínculo</span>`}</td>
                   <td><strong>${esc(item.externalClientName || opportunity?.clientName || "Registro externo")}</strong></td>
                   <td>${esc(paymentTypeLabel(item.type))}</td>
                   <td>${brl(item.amountCents)}</td>
@@ -2408,11 +2507,11 @@ function renderCommissions() {
   const firstSummary = firstContract ? contractPaymentSummary(firstContract.id) : null;
 
   return `
-    ${pageHead("Comissoes", "Lancamento manual de comissoes pelo gestor")}
+    ${pageHead("Comissões", "Lancamento manual de comissões pelo gestor")}
     <section class="card">
       <div class="section-head">
         <div>
-          <h3>Registrar comissao manual</h3>
+          <h3>Registrar comissão manual</h3>
           <p>O portal mostra receita contratada, total pago e uma sugestao de regra. O gestor confere e edita a base, taxa e valor antes de lancar.</p>
         </div>
       </div>
@@ -2446,33 +2545,33 @@ function renderCommissions() {
             </select>
           </label>
           <label class="field">
-            <span>Regra de comissao</span>
+            <span>Regra de comissão</span>
             <select name="rateBps" data-commission-rate-select required>
               ${commissionRateOptions(defaultRateBps)}
             </select>
             <small>Sugestao: 10% quando o total confirmado cobre o contrato; 5% quando ainda e ciclo parcial.</small>
           </label>
           <label class="field">
-            <span>Base da comissao</span>
+            <span>Base da comissão</span>
             <input name="baseAmount" data-money-input data-commission-base-input inputmode="decimal" value="${moneyInputValue(defaultBaseCents)}" required />
           </label>
           <label class="field">
-            <span>Valor da comissao</span>
+            <span>Valor da comissão</span>
             <input name="amount" data-money-input data-commission-amount-input inputmode="decimal" value="${moneyInputValue(defaultAmountCents)}" required />
             <small>O gestor pode sobrescrever antes de salvar.</small>
           </label>
           <div class="form-actions">
-            <button class="button" type="submit">Registrar comissao</button>
+            <button class="button" type="submit">Registrar comissão</button>
           </div>
         </form>
       ` : empty("Nenhum pagamento confirmado pendente de comissão", "$", "Registre e confirme um pagamento em Pagamentos para liberar o lançamento manual de comissão.", `<button class="button secondary" type="button" data-route="payments">Ir para pagamentos</button>`)}
     </section>
     ${renderSdrCommissionOverview()}
-    <h3 style="margin-top:28px">Comissoes Individuais</h3>
+    <h3 style="margin-top:28px">Comissões Individuais</h3>
     ${items.length ? `
       <div class="table-wrap">
         <table class="commission-edit-table">
-          <thead><tr><th>SDR</th><th>Contrato</th><th>Pagamento</th><th>Receita / pago</th><th>Base</th><th>Taxa</th><th>Comissao</th><th>Status</th><th>Acoes</th></tr></thead>
+          <thead><tr><th>SDR</th><th>Contrato</th><th>Pagamento</th><th>Receita / pago</th><th>Base</th><th>Taxa</th><th>Comissão</th><th>Status</th><th>Ações</th></tr></thead>
           <tbody>
             ${items.map((item) => {
               const contract = byId(state.contracts, item.contractId);
@@ -2517,9 +2616,9 @@ function renderMyCommissions() {
   const availableCount = summary.commissions.filter((item) => item.status === "available").length;
   const remainingToBatch = availableCount ? 5 - summary.cycleCount : 5;
   return `
-    ${pageHead("Minhas Comissoes", "Sua comissao, ciclo de pagamento e historico recebido")}
+    ${pageHead("Minhas Comissões", "Sua comissão, ciclo de pagamento e historico recebido")}
     <div class="grid cards-4">
-      ${metricCard("Comissao Disponivel", brl(summary.availableCents), "$")}
+      ${metricCard("Comissão Disponível", brl(summary.availableCents), "$")}
       ${metricCard("Ciclo de Pagamento", `${summary.cycleCount} de 5`, "", (summary.cycleCount / 5) * 100)}
       ${metricCard("Total Recebido", brl(summary.paidCents), "$")}
       ${metricCard("Em Lote", brl(summary.batchedCents), "$")}
@@ -2529,13 +2628,13 @@ function renderMyCommissions() {
       <div class="section-head">
         <div>
           <h3>Resumo do ciclo atual</h3>
-          <p>O ciclo fecha automaticamente a cada cinco comissoes disponiveis.</p>
+          <p>O ciclo fecha automaticamente a cada cinco comissões disponiveis.</p>
         </div>
       </div>
       <div class="kpi-list">
-        <div class="kpi-row"><span>Comissoes disponiveis no ciclo</span><strong>${availableCount}</strong></div>
-        <div class="kpi-row"><span>Faltam para fechar o proximo lote</span><strong>${remainingToBatch} venda(s)</strong></div>
-        <div class="kpi-row"><span>Comissao total gerada</span><strong>${brl(summary.totalCommissionCents)}</strong></div>
+        <div class="kpi-row"><span>Comissões disponiveis no ciclo</span><strong>${availableCount}</strong></div>
+        <div class="kpi-row"><span>Faltam para fechar o próximo lote</span><strong>${remainingToBatch} venda(s)</strong></div>
+        <div class="kpi-row"><span>Comissão total gerada</span><strong>${brl(summary.totalCommissionCents)}</strong></div>
         <div class="kpi-row"><span>Vendas validadas</span><strong>${summary.validatedSales}</strong></div>
       </div>
     </section>
@@ -2543,7 +2642,7 @@ function renderMyCommissions() {
     <section class="card">
       <div class="section-head">
         <div>
-          <h3>Minhas comissoes</h3>
+          <h3>Minhas comissões</h3>
           <p>Somente vendas vinculadas a ${esc(currentUser.name)} aparecem aqui.</p>
         </div>
       </div>
@@ -2642,7 +2741,7 @@ function renderProjectsManagement() {
   return `
     ${pageHead(
       "Projetos",
-      "Gestao de tarefas dos projetos em tabela",
+      "Gestão de tarefas dos projetos em tabela",
       currentUser.role === "admin_manager" ? `<button class="button" type="button" data-new-project>${renderIcon("plus")} Adicionar projeto</button>` : ""
     )}
     ${items.length ? `
@@ -2720,7 +2819,7 @@ function renderFiles() {
     currentUser.role === "admin_manager" && batch.status === "paid"
   );
   return `
-    ${pageHead("Arquivos", "Comprovantes dos pagamentos de comissao feitos para as SDRs")}
+    ${pageHead("Arquivos", "Comprovantes dos pagamentos de comissão feitos para as SDRs")}
     <div class="grid cards-3">
       ${metricCard("Comprovantes", files.length, "▧")}
       ${metricCard("Total comprovado", brl(files.reduce((sum, item) => sum + (item.amountCents || 0), 0)), "$")}
@@ -2730,7 +2829,7 @@ function renderFiles() {
       <section class="card" style="margin-top:18px">
         <form class="form-grid" data-file-form>
           <label class="field">
-            <span>Lote de comissao pago</span>
+            <span>Lote de comissão pago</span>
             <select name="payoutBatchId">
               <option value="">Sem lote especifico</option>
               ${availableBatches.map((batch) => `<option value="${batch.id}">#${batch.sequenceNumber} - ${esc(getActorName(batch.sdrId))} - ${brl(batch.totalAmountCents)}</option>`).join("")}
@@ -2754,7 +2853,7 @@ function renderFiles() {
         </form>
       </section>
     ` : ""}
-    <div style="margin-top:18px">${files.length ? fileTable(files) : `<section class="card">${empty("Nenhum comprovante de comissao registrado", "▧")}</section>`}</div>
+    <div style="margin-top:18px">${files.length ? fileTable(files) : `<section class="card">${empty("Nenhum comprovante de comissão registrado", "▧")}</section>`}</div>
   `;
 }
 
@@ -2829,13 +2928,13 @@ function projectProgress(project) {
 function renderServices() {
   const items = soldServices();
   return `
-    ${pageHead("Servicos", "Servicos vendidos para clientes e andamento dos projetos")}
+    ${pageHead("Serviços", "Serviços vendidos para clientes e andamento dos projetos")}
     ${items.length ? `
       <div class="grid cards-3">
         ${items.map(renderSoldServiceCard).join("")}
       </div>
       <section class="card" style="margin-top:18px">
-        <p class="section-title">Todos os servicos vendidos</p>
+        <p class="section-title">Todos os serviços vendidos</p>
         ${renderSoldServicesTable(items)}
       </section>
     ` : `<section class="card">${empty("Nenhum servico vendido ainda", "◇")}<p style="text-align:center;color:var(--muted)">Quando uma venda for validada, o servico contratado aparecera aqui com o ambiente do projeto.</p></section>`}
@@ -2857,7 +2956,7 @@ function renderSoldServiceCard(item) {
       <div class="kpi-list">
         <div class="kpi-row"><span>Contrato</span><strong>${esc(item.contract.contractNumber)}</strong></div>
         <div class="kpi-row"><span>Valor vendido</span><strong>${brl(item.contract.amountCents)}</strong></div>
-        <div class="kpi-row"><span>Etapa atual</span><strong>${esc(stage?.name || "Projeto nao criado")}</strong></div>
+        <div class="kpi-row"><span>Etapa atual</span><strong>${esc(stage?.name || "Projeto não criado")}</strong></div>
         <div class="kpi-row"><span>Responsavel</span><strong>${esc(getActorName(item.project?.managerId || item.contract.createdBy))}</strong></div>
       </div>
       <div class="progress" aria-label="Progresso do projeto">
@@ -2896,7 +2995,7 @@ function renderSoldServicesTable(items) {
 function renderReports() {
   const m = metrics();
   return `
-    ${pageHead("Relatorios", "Indicadores operacionais e exportacao CSV")}
+    ${pageHead("Relatórios", "Indicadores operacionais e exportação CSV")}
     <div class="grid cards-3">
       ${metricCard("Receita contratada", brl(m.revenue), "$")}
       ${metricCard("Receita recebida", brl(m.received), "$")}
@@ -2906,7 +3005,7 @@ function renderReports() {
       <div class="actions" style="margin-top:0">
         <button class="button" data-export-csv="opportunities">Exportar oportunidades CSV</button>
         <button class="button secondary" data-export-csv="payments">Exportar pagamentos CSV</button>
-        <button class="button secondary" data-export-csv="commissions">Exportar comissoes CSV</button>
+        <button class="button secondary" data-export-csv="commissions">Exportar comissões CSV</button>
         <button class="button secondary" data-export-csv="audit">Exportar auditoria CSV</button>
       </div>
     </section>
@@ -2976,7 +3075,7 @@ function renderReportsFinance() {
   const commissions = state.commissions.filter((item) => currentUser.role === "admin_manager" || item.sdrId === currentUser.id);
   const receipts = visibleFiles();
   return `
-    ${pageHead("Relatorios", "Pagamentos, comissoes, comprovantes e indicadores operacionais")}
+    ${pageHead("Relatórios", "Pagamentos, comissões, comprovantes e indicadores operacionais")}
     <div class="grid cards-3">
       ${metricCard("Receita contratada", brl(m.revenue), "$")}
       ${metricCard("Receita recebida", brl(m.received), "$")}
@@ -2984,15 +3083,15 @@ function renderReportsFinance() {
     </div>
     <div class="grid cards-3" style="margin-top:16px">
       ${metricCard("Pagamentos registrados", payments.length, "$")}
-      ${metricCard("Comissoes geradas", brl(commissions.reduce((sum, item) => sum + item.amountCents, 0)), "$")}
-      ${metricCard("Comprovantes de comissao", receipts.length, "▧")}
+      ${metricCard("Comissões geradas", brl(commissions.reduce((sum, item) => sum + item.amountCents, 0)), "$")}
+      ${metricCard("Comprovantes de comissão", receipts.length, "▧")}
     </div>
     <div style="margin-top:18px">${renderFinanceChart(payments, commissions)}</div>
     <section class="card" style="margin-top:18px">
       <div class="actions" style="margin-top:0">
         <button class="button" data-export-csv="opportunities">Exportar oportunidades CSV</button>
         <button class="button" data-export-csv="payments">Exportar pagamentos CSV</button>
-        <button class="button" data-export-csv="commissions">Exportar comissoes CSV</button>
+        <button class="button" data-export-csv="commissions">Exportar comissões CSV</button>
         <button class="button" data-export-csv="commission_receipts">Exportar comprovantes CSV</button>
         <button class="button secondary" data-export-csv="audit">Exportar auditoria CSV</button>
       </div>
@@ -3006,7 +3105,7 @@ function renderAudit() {
     ${state.auditLogs.length ? `
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Data</th><th>Usuario</th><th>Acao</th><th>Entidade</th><th>ID</th></tr></thead>
+          <thead><tr><th>Data</th><th>Usuário</th><th>Ação</th><th>Entidade</th><th>ID</th></tr></thead>
           <tbody>
             ${state.auditLogs.map((item) => `
               <tr>
@@ -3032,7 +3131,7 @@ function renderSettings() {
         <span class="profile-avatar">${esc(initials(currentUser.name))}</span>
         <div><span class="section-title">Meu perfil</span><h3>${esc(currentUser.name)}</h3><p>${esc(currentUser.email)} · ${esc(roleLabels[currentUser.role])}</p></div>
       </div>
-      <div class="profile-meta"><span>Ambiente</span><strong>${currentUser.workspaceKind === "training" ? "Treinamento" : "Operacao"}</strong></div>
+      <div class="profile-meta"><span>Ambiente</span><strong>${currentUser.workspaceKind === "training" ? "Treinamento" : "Operação"}</strong></div>
     </section>
     <div class="settings-layout">
       ${currentUser.role === "admin_manager" ? `
@@ -3061,7 +3160,7 @@ function renderSettings() {
       </section>
       ` : `
       <section class="card">
-        <div class="section-head"><div><h3>Acesso da SDR</h3><p>Seu perfil visualiza apenas oportunidades, contratos, projetos, pagamentos informativos, arquivos e comissoes atribuidos a voce.</p></div>${renderIcon("shield-check")}</div>
+        <div class="section-head"><div><h3>Acesso da SDR</h3><p>Seu perfil visualiza apenas oportunidades, contratos, projetos, pagamentos informativos, arquivos e comissões atribuidos a voce.</p></div>${renderIcon("shield-check")}</div>
         <div class="security-status is-secure"><strong>Acesso individual e protegido</strong></div>
       </section>
       `}
@@ -3204,7 +3303,7 @@ function renderNewOpportunityDrawer() {
     <div class="drawer-backdrop" data-close-drawer>
       <aside class="drawer" role="dialog" aria-modal="true" aria-label="Nova oportunidade" data-drawer-panel>
         <header class="drawer-head">
-          <div><h3>Nova Oportunidade</h3><p>Cadastre o lead no CRM e peca aprovacao da condicao quando estiver pronto.</p></div>
+          <div><h3>Nova Oportunidade</h3><p>Cadastre o lead no CRM e peca aprovação da condição quando estiver pronto.</p></div>
           <button class="icon-button" data-close-drawer type="button">×</button>
         </header>
         <form class="drawer-body" data-opportunity-form>
@@ -3225,7 +3324,7 @@ function renderNewProjectDrawer() {
     <div class="drawer-backdrop" data-close-drawer>
       <aside class="drawer" role="dialog" aria-modal="true" aria-label="Adicionar projeto" data-drawer-panel>
         <header class="drawer-head">
-          <div><h3>Adicionar projeto</h3><p>Crie um projeto manual mesmo quando ele nao nasceu de uma oportunidade comercial.</p></div>
+          <div><h3>Adicionar projeto</h3><p>Crie um projeto manual mesmo quando ele não nasceu de uma oportunidade comercial.</p></div>
           <button class="icon-button" data-close-drawer type="button">x</button>
         </header>
         <form class="drawer-body" data-project-form>
@@ -3244,7 +3343,7 @@ function renderNewProjectDrawer() {
           </section>
           <section class="card">
             <fieldset class="field service-picker" data-service-picker>
-              <legend>Servicos do projeto *</legend>
+              <legend>Serviços do projeto *</legend>
               <div class="service-picker-toolbar"><strong data-service-count>0 selecionado(s)</strong><button class="button ghost compact-button" type="button" data-clear-services>Limpar selecao</button></div>
               <div class="check-grid service-check-grid">
                 ${state.services.map((item) => `<div class="check-card service-check-card" role="checkbox" aria-checked="false" tabindex="0" data-service-card><input type="checkbox" name="serviceIds" value="${item.id}" data-service-option tabindex="-1" aria-hidden="true" /><span>${esc(item.name)}</span>${renderIcon("check", "service-selected-icon")}</div>`).join("")}
@@ -3322,7 +3421,7 @@ function opportunityFormFields(opportunity = {}) {
       <p class="section-title">Oportunidade</p>
       <div class="form-grid">
         <fieldset class="field full service-picker" data-service-picker>
-          <legend>Servicos possiveis</legend>
+          <legend>Serviços possiveis</legend>
           <div class="service-picker-toolbar">
             <strong data-service-count>${selectedServiceIds.length} selecionado(s)</strong>
             <button class="button ghost compact-button" type="button" data-clear-services>Limpar selecao</button>
@@ -3371,7 +3470,7 @@ function opportunityFormFields(opportunity = {}) {
         ${renderDateField("Prazo sugerido", "suggestedDeadline", opportunity.suggestedDeadline)}
         <label class="field full"><span>Objecoes</span><textarea name="objections">${esc(opportunity.objections)}</textarea></label>
         <label class="field full">
-          <span>Condicoes solicitadas</span>
+          <span>Condições solicitadas</span>
           <select name="requestedConditions">${paymentPlanOptions(opportunity.requestedConditions || opportunity.suggestedPaymentTerms)}</select>
         </label>
       </div>
@@ -3382,7 +3481,7 @@ function opportunityFormFields(opportunity = {}) {
 function renderOpportunityCrmReadOnly(opp) {
   return `
     <section class="card">
-      <p class="section-title">Informacoes do CRM</p>
+      <p class="section-title">Informações do CRM</p>
       <div class="detail-list">
         <div class="detail-row"><span>Instagram</span><strong>${esc(opp.instagram || "-")}</strong></div>
         <div class="detail-row"><span>Site</span><strong>${esc(opp.website || "-")}</strong></div>
@@ -3454,8 +3553,8 @@ function renderOpportunityDrawer(id) {
             <div class="detail-list">
               <div class="detail-row"><span>SDR</span><strong>${esc(getActorName(opp.sdrId))}</strong></div>
               <div class="detail-row"><span>Status do CRM</span><strong>${crmStatusBadge(opp.crmStatus)}</strong></div>
-              <div class="detail-row"><span>Status da condicao</span><strong>${statusBadge(opp.status)}</strong></div>
-              <div class="detail-row"><span>Servicos</span><strong>${esc(serviceNamesForOpportunity(opp))}</strong></div>
+              <div class="detail-row"><span>Status da condição</span><strong>${statusBadge(opp.status)}</strong></div>
+              <div class="detail-row"><span>Serviços</span><strong>${esc(serviceNamesForOpportunity(opp))}</strong></div>
               <div class="detail-row"><span>Valor sugerido</span><strong>${brl(opp.suggestedAmountCents)}</strong></div>
               <div class="detail-row"><span>Desconto</span><strong>${percentInputValue(discountPercentForOpportunity(opp))}% - ${brl(opp.suggestedDiscountCents)}</strong></div>
               <div class="detail-row"><span>Valor liquido</span><strong>${brl(netAmountAfterDiscount(opp.suggestedAmountCents, discountPercentForOpportunity(opp)))}</strong></div>
@@ -3478,7 +3577,7 @@ function renderOpportunityDrawer(id) {
           ${contract ? renderCommercialContractCard(contract, payment) : ""}
 
           <section class="card opportunity-action-card">
-            <p class="section-title">Acoes</p>
+            <p class="section-title">Ações</p>
             ${renderOpportunityActionPanel(opp, contract, payment, { canManage, canSdrAct, approvalMissing })}
           </section>
 
@@ -3505,9 +3604,9 @@ function renderOpportunityDrawer(id) {
 function renderApprovalActions(opp) {
   const selectedAction = drawer?.approvalAction;
   return `
-    <button class="button success" data-open-approval-action="${opp.id}" data-approval-action="approved">Aprovar sem alteracao</button>
-    <button class="button" data-open-approval-action="${opp.id}" data-approval-action="approved_with_changes">Aprovar com alteracoes</button>
-    <button class="button secondary" data-open-approval-action="${opp.id}" data-approval-action="needs_information">Solicitar informacoes</button>
+    <button class="button success" data-open-approval-action="${opp.id}" data-approval-action="approved">Aprovar sem alteração</button>
+    <button class="button" data-open-approval-action="${opp.id}" data-approval-action="approved_with_changes">Aprovar com alterações</button>
+    <button class="button secondary" data-open-approval-action="${opp.id}" data-approval-action="needs_information">Solicitar informações</button>
     <button class="button danger" data-open-approval-action="${opp.id}" data-approval-action="rejected">Recusar</button>
     ${selectedAction ? renderApprovalFollowActionMenu(opp, selectedAction) : ""}
   `;
@@ -3519,7 +3618,7 @@ function renderOpportunityActionPanel(opp, contract, payment, permissions) {
   let tone = "neutral";
   let icon = "circle-help";
   let eyebrow = "Status atual";
-  let title = "Nenhuma decisao pendente";
+  let title = "Nenhuma decisão pendente";
   let description = `A oportunidade esta em ${statusLabels[opp.status] || opp.status}.`;
   let primaryActions = "";
 
@@ -3527,26 +3626,26 @@ function renderOpportunityActionPanel(opp, contract, payment, permissions) {
     tone = "review";
     icon = "badge-check";
     eyebrow = "Decisao do gestor";
-    title = "Condicao aguardando sua aprovacao";
-    description = "Revise valor, desconto, forma de pagamento, servicos e escopo. Depois escolha uma das quatro decisoes abaixo.";
+    title = "Condição aguardando sua aprovação";
+    description = "Revise valor, desconto, forma de pagamento, serviços e escopo. Depois escolha uma das quatro decisões abaixo.";
     primaryActions = renderApprovalActions(opp);
   } else if (canManage && opp.status === "needs_information") {
     tone = "waiting";
     icon = "clock-3";
     eyebrow = "Aguardando SDR";
-    title = "Informacoes complementares solicitadas";
-    description = "A decisao sera reaberta aqui quando a SDR responder e reenviar a condicao para analise.";
+    title = "Informações complementares solicitadas";
+    description = "A decisão sera reaberta aqui quando a SDR responder e reenviar a condição para análise.";
   } else if (canManage && opp.status === "draft") {
     tone = approvalMissing.length ? "waiting" : "review";
     icon = "send";
-    eyebrow = "Condicao em rascunho";
-    title = approvalMissing.length ? "Complete a condicao antes da analise" : "Condicao pronta para entrar em analise";
+    eyebrow = "Condição em rascunho";
+    title = approvalMissing.length ? "Complete a condição antes da análise" : "Condição pronta para entrar em análise";
     description = approvalMissing.length
       ? `Ainda falta ${approvalMissing.join(", ")}. O gestor pode completar os dados nesta tela.`
-      : "Envie a condicao para analise. Em seguida, as quatro decisoes do gestor aparecerao nesta mesma area.";
+      : "Envie a condição para análise. Em seguida, as quatro decisões do gestor aparecerao nesta mesma area.";
     primaryActions = approvalMissing.length
-      ? `<button class="button" type="button" disabled>${renderIcon("send")} Enviar para analise</button>`
-      : `<button class="button" type="button" data-submit-opportunity="${opp.id}">${renderIcon("send")} Enviar para analise</button>`;
+      ? `<button class="button" type="button" disabled>${renderIcon("send")} Enviar para análise</button>`
+      : `<button class="button" type="button" data-submit-opportunity="${opp.id}">${renderIcon("send")} Enviar para análise</button>`;
   } else if (isTerminallyRejected(opp)) {
     tone = "blocked";
     icon = "lock-keyhole";
@@ -3554,43 +3653,43 @@ function renderOpportunityActionPanel(opp, contract, payment, permissions) {
     title = "Oportunidade arquivada e bloqueada";
     description = opp.rejectionReason
       ? `Motivo: ${opp.rejectionReason}`
-      : "A condicao foi recusada pelo gestor. Este registro permanece apenas para consulta e nao pode ser alterado ou restaurado.";
+      : "A condição foi recusada pelo gestor. Este registro permanece apenas para consulta e não pode ser alterado ou restaurado.";
   } else if (canManage && approvedStatuses.includes(opp.status)) {
     tone = "approved";
     icon = "circle-check";
-    eyebrow = "Condicao aprovada";
-    title = contract ? `Contrato ${contract.contractNumber} aberto` : "Aprovacao concluida";
+    eyebrow = "Condição aprovada";
+    title = contract ? `Contrato ${contract.contractNumber} aberto` : "Aprovação concluida";
     description = contract
-      ? "A decisao comercial foi registrada. Continue pelo contrato, pagamento e validacao da venda."
-      : "A decisao foi registrada e os proximos registros comerciais estao sendo preparados.";
+      ? "A decisão comercial foi registrada. Continue pelo contrato, pagamento e validacao da venda."
+      : "A decisão foi registrada e os próximos registros comerciais estao sendo preparados.";
   } else if (canSdrAct && canRequestConditionApproval(opp)) {
     tone = approvalMissing.length ? "waiting" : "review";
     icon = "send";
     eyebrow = "Proximo passo da SDR";
-    title = "Enviar a condicao para aprovacao";
+    title = "Enviar a condição para aprovação";
     description = approvalMissing.length
       ? `Complete ${approvalMissing.join(", ")} e salve a oportunidade antes do envio.`
-      : "Os dados minimos estao completos. O gestor recebera esta oportunidade na fila de aprovacoes.";
+      : "Os dados minimos estao completos. O gestor recebera esta oportunidade na fila de aprovações.";
     primaryActions = approvalMissing.length
-      ? `<button class="button" type="button" disabled title="Complete os campos indicados">${renderIcon("send")} Pedir aprovacao</button>`
-      : `<button class="button" type="button" data-submit-opportunity="${opp.id}">${renderIcon("send")} Pedir aprovacao</button>`;
+      ? `<button class="button" type="button" disabled title="Complete os campos indicados">${renderIcon("send")} Pedir aprovação</button>`
+      : `<button class="button" type="button" data-submit-opportunity="${opp.id}">${renderIcon("send")} Pedir aprovação</button>`;
   } else if (canSdrAct && opp.status === "pending_approval") {
     tone = "waiting";
     icon = "clock-3";
-    eyebrow = "Em analise";
-    title = "Aguardando decisao do gestor";
-    description = "Quando o gestor decidir, a resposta e o proximo passo aparecerao nesta mesma area.";
+    eyebrow = "Em análise";
+    title = "Aguardando decisão do gestor";
+    description = "Quando o gestor decidir, a resposta e o próximo passo aparecerao nesta mesma area.";
   } else if (canSdrAct && opp.status === "needs_information") {
     tone = "review";
     icon = "message-square-more";
-    eyebrow = "Acao necessaria";
-    title = "O gestor pediu mais informacoes";
-    description = "Responda ao pedido para devolver a condicao a fila de analise.";
-    primaryActions = `<button class="button" data-open-opportunity-follow="${opp.id}" data-follow-action="answer_information">Responder informacoes</button>`;
+    eyebrow = "Ação necessaria";
+    title = "O gestor pediu mais informações";
+    description = "Responda ao pedido para devolver a condição a fila de análise.";
+    primaryActions = `<button class="button" data-open-opportunity-follow="${opp.id}" data-follow-action="answer_information">Responder informações</button>`;
   } else if (canSdrAct && approvedStatuses.includes(opp.status)) {
     tone = "approved";
     icon = "circle-check";
-    eyebrow = "Condicao aprovada";
+    eyebrow = "Condição aprovada";
     title = "Continue o acompanhamento com a cliente";
     description = "A proposta e o contrato ficam disponiveis somente para oportunidades atribuidas a voce.";
   }
@@ -3664,13 +3763,13 @@ function renderOpportunityFollowForm(opp) {
 function approvalActionConfig(action) {
   const configs = {
     approved: {
-      title: "Aprovar sem alteracao",
-      description: "Confirme a aprovacao e defina a proxima acao do contrato.",
-      button: "Confirmar aprovacao",
+      title: "Aprovar sem alteração",
+      description: "Confirme a aprovação e defina a próxima acao do contrato.",
+      button: "Confirmar aprovação",
       requiresReason: false,
       requiresAmount: false,
       reasonLabel: "Observação da aprovação",
-      defaultReason: "Aprovado sem alteracao.",
+      defaultReason: "Aprovado sem alteração.",
       followOptions: [
         "Abrir contrato e preparar proposta",
         "Enviar proposta para SDR",
@@ -3678,12 +3777,12 @@ function approvalActionConfig(action) {
       ],
     },
     approved_with_changes: {
-      title: "Aprovar com alteracoes",
-      description: "Registre o ajuste aprovado, o novo valor final e a proxima acao.",
-      button: "Aprovar com alteracoes",
+      title: "Aprovar com alterações",
+      description: "Registre o ajuste aprovado, o novo valor final e a próxima acao.",
+      button: "Aprovar com alterações",
       requiresReason: true,
       requiresAmount: true,
-      reasonLabel: "Justificativa da alteracao",
+      reasonLabel: "Justificativa da alteração",
       defaultReason: "Ajuste comercial aprovado pelo gestor.",
       followOptions: [
         "Revisar proposta com novo valor",
@@ -3692,22 +3791,22 @@ function approvalActionConfig(action) {
       ],
     },
     needs_information: {
-      title: "Solicitar informacoes",
-      description: "Explique o que a SDR precisa complementar antes da aprovacao.",
+      title: "Solicitar informações",
+      description: "Explique o que a SDR precisa complementar antes da aprovação.",
       button: "Enviar solicitacao",
       requiresReason: true,
       requiresAmount: false,
-      reasonLabel: "Informacao necessaria",
+      reasonLabel: "Informação necessaria",
       defaultReason: "Detalhar prazo, escopo e entregaveis.",
       followOptions: [
         "Aguardar complemento da SDR",
         "Revisar CRM apos complemento",
-        "Reagendar analise comercial",
+        "Reagendar análise comercial",
       ],
     },
     rejected: {
       title: "Recusar oportunidade",
-      description: "Esta decisao e definitiva. Ao confirmar, a oportunidade sera arquivada e bloqueada para gestores e SDRs.",
+      description: "Esta decisão é definitiva. Ao confirmar, a oportunidade será arquivada e bloqueada para gestores e SDRs.",
       button: "Recusar e arquivar",
       requiresReason: true,
       requiresAmount: false,
@@ -3749,7 +3848,7 @@ function renderApprovalFollowActionMenu(opp, action) {
               ${config.followOptions.map((option) => `<option value="${esc(option)}">${esc(option)}</option>`).join("")}
             </select>
           </label>
-          ${renderDateField("Data da proxima acao", "nextActionDate", addDays(action === "needs_information" ? 2 : 1))}
+          ${renderDateField("Data da próxima acao", "nextActionDate", addDays(action === "needs_information" ? 2 : 1))}
         `}
         <label class="field full">
           <span>${esc(config.reasonLabel)}${config.requiresReason ? " *" : ""}</span>
@@ -3768,7 +3867,7 @@ function renderConditionCard(condition) {
   const discountPercent = Number(condition.discountPercent ?? condition.discountRatePercent ?? 0);
   return `
     <section class="card">
-      <p class="section-title">Condicao aprovada vigente</p>
+      <p class="section-title">Condição aprovada vigente</p>
       <div class="detail-list">
         <div class="detail-row"><span>Versao</span><strong>v${condition.versionNumber}</strong></div>
         <div class="detail-row"><span>Valor final</span><strong>${brl(condition.amountCents)}</strong></div>
@@ -3791,7 +3890,7 @@ function renderContractCard(contract, payment) {
         <div class="detail-row"><span>Valor</span><strong>${brl(contract.amountCents)}</strong></div>
         <div class="detail-row"><span>Condição usada</span><strong>${esc(paymentPlanLabel(contract.paymentPlan))}</strong></div>
         <div class="detail-row"><span>Pagamento inicial</span><div>${payment ? `${brl(payment.amountCents)} · ${statusLabels[payment.status]}` : "-"}</div></div>
-        <div class="detail-row"><span>Venda validada</span><strong>${contract.saleValidatedAt ? dateLabel(contract.saleValidatedAt) : "Nao"}</strong></div>
+        <div class="detail-row"><span>Venda validada</span><strong>${contract.saleValidatedAt ? dateLabel(contract.saleValidatedAt) : "Não"}</strong></div>
       </div>
     </section>
   `;
@@ -3811,9 +3910,9 @@ function renderCommercialContractCard(contract, payment) {
         <div class="detail-row"><span>Forma</span><strong>${esc(paymentPlanLabel(contract.paymentPlan))}</strong></div>
         <div class="detail-row"><span>Condição usada</span><strong>${esc(paymentPlanLabel(contract.paymentPlan))}</strong></div>
         <div class="detail-row"><span>Proposta PDF</span><div>${contract.proposalFileName ? attachmentLink(contract.proposalAttachmentId, contract.proposalFileName) : "Não anexada"}</div></div>
-        <div class="detail-row"><span>Link do contrato</span><div>${contract.contractLink ? `<a href="${esc(contract.contractLink)}" target="_blank" rel="noreferrer">${esc(contract.contractLink)}</a>` : "Nao informado"}</div></div>
+        <div class="detail-row"><span>Link do contrato</span><div>${contract.contractLink ? `<a href="${esc(contract.contractLink)}" target="_blank" rel="noreferrer">${esc(contract.contractLink)}</a>` : "Não informado"}</div></div>
         <div class="detail-row"><span>Pagamento inicial</span><div>${payment ? `${brl(payment.amountCents)} - ${statusLabels[payment.status]}` : "-"}</div></div>
-        <div class="detail-row"><span>Venda validada</span><strong>${contract.saleValidatedAt ? dateLabel(contract.saleValidatedAt) : "Nao"}</strong></div>
+        <div class="detail-row"><span>Venda validada</span><strong>${contract.saleValidatedAt ? dateLabel(contract.saleValidatedAt) : "Não"}</strong></div>
       </div>
       ${canManage ? `
         <form class="form-grid contract-plan-form" data-contract-plan-form="${contract.id}">
@@ -3828,7 +3927,7 @@ function renderCommercialContractCard(contract, payment) {
             </select>
           </label>
           <label class="field full">
-            <span>Condicao de pagamento</span>
+            <span>Condição de pagamento</span>
             <input name="paymentTerms" value="${esc(contract.paymentTerms)}" placeholder="Ex. 50% entrada + 50% entrega" />
           </label>
           <label class="field full">
@@ -3883,7 +3982,7 @@ function renderContractDrawer(id) {
   `;
   const side = `
     <section class="card action-panel">
-      <p class="section-title">Proximas acoes</p>
+      <p class="section-title">Próximas acoes</p>
       <div class="actions stacked-actions">
         ${canManage && contract.status === "sent" ? `<button class="button" data-sign-contract="${contract.id}">Confirmar assinatura</button>` : ""}
         ${canManage ? `<button class="button secondary" data-register-contract-payment="${contract.id}">Registrar pagamento</button>` : ""}
@@ -3900,7 +3999,7 @@ function renderContractDrawer(id) {
         <div class="detail-row"><span>Cliente</span><strong>${esc(opp?.clientName || "-")}</strong></div>
         <div class="detail-row"><span>Marca</span><strong>${esc(opp?.brandName || "-")}</strong></div>
         <div class="detail-row"><span>SDR</span><strong>${esc(getActorName(opp?.sdrId))}</strong></div>
-        <div class="detail-row"><span>Servicos</span><div>${esc(serviceNamesForOpportunity(opp))}</div></div>
+        <div class="detail-row"><span>Serviços</span><div>${esc(serviceNamesForOpportunity(opp))}</div></div>
         <div class="detail-row"><span>Contrato</span><strong>${esc(contract.contractNumber)}</strong></div>
         <div class="detail-row"><span>Status</span>${statusBadge(contract.status)}</div>
       </div>
@@ -3955,10 +4054,10 @@ function renderPaymentRecordDrawer(contractId, paymentId = null) {
         <span class="context-icon">${renderIcon("link-2-off")}</span>
         <p class="section-title">Fora do CRM</p>
         <h3>Registro independente</h3>
-        <p>Este pagamento entra no controle e nos relatorios do gestor. Ele nao gera comissao ate ser vinculado a um contrato.</p>
+        <p>Este pagamento entra no controle e nos relatórios do gestor. Ele não gera comissão até ser vinculado a um contrato.</p>
       </section>
     `}
-    <section class="card notice-card"><strong>Nao e uma cobranca</strong><p>Este formulario apenas registra pagamentos recebidos fora da plataforma.</p></section>
+    <section class="card notice-card"><strong>Não e uma cobranca</strong><p>Este formulario apenas registra pagamentos recebidos fora da plataforma.</p></section>
   `;
   const main = `
     <section class="card">
@@ -3966,24 +4065,24 @@ function renderPaymentRecordDrawer(contractId, paymentId = null) {
       <form class="form-grid" data-payment-record-form>
         <input name="paymentId" type="hidden" value="${esc(payment?.id || "")}" />
         <label class="field full payment-link-field">
-          <span>Vinculo com o CRM</span>
+          <span>Vínculo com o CRM</span>
           <select name="contractId" data-payment-link-select>
-            <option value="" ${contract ? "" : "selected"}>Sem vinculo - pagamento por fora do CRM</option>
+            <option value="" ${contract ? "" : "selected"}>Sem vínculo - pagamento por fora do CRM</option>
             ${contractOptions}
           </select>
-          <small>Voce pode deixar sem vinculo e conectar este pagamento a um contrato depois.</small>
+          <small>Voce pode deixar sem vínculo e conectar este pagamento a um contrato depois.</small>
         </label>
         <label class="field full"><span>Cliente ou origem do pagamento *</span><input name="externalClientName" required value="${esc(payment?.externalClientName || opp?.clientName || "")}" placeholder="Ex. Cliente avulso, evento ou nome da empresa" /></label>
         <label class="field"><span>Valor registrado</span><input name="amount" data-money-input inputmode="decimal" required value="${moneyInputValue(suggested)}" /></label>
         <label class="field"><span>Status do registro</span><select name="status"><option value="confirmed" ${!payment || payment.status === "confirmed" ? "selected" : ""}>Confirmado / conferido</option><option value="pending" ${payment?.status === "pending" ? "selected" : ""}>Aguardando conferencia</option></select></label>
         <label class="field"><span>Tipo</span><select name="type">${[["external", "Pagamento externo"], ["contract_payment", "Pagamento do contrato"], ["initial", "Entrada"], ["installment", "Parcela"], ["remaining", "Saldo restante"], ["adjustment", "Ajuste"]].map(([value, label]) => `<option value="${value}" ${(!payment && value === (contract ? "contract_payment" : "external")) || payment?.type === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
-        <label class="field"><span>Metodo externo</span><select name="method">${["Pix", "Transferencia", "Boleto", "Cartao externo", "Dinheiro", "Outro"].map((method) => `<option value="${method}" ${payment?.method === method ? "selected" : ""}>${method}</option>`).join("")}</select></label>
+        <label class="field"><span>Método externo</span><select name="method">${["Pix", "Transferencia", "Boleto", "Cartao externo", "Dinheiro", "Outro"].map((method) => `<option value="${method}" ${payment?.method === method ? "selected" : ""}>${method}</option>`).join("")}</select></label>
         ${renderDateField("Data do pagamento", "paidAt", String(payment?.paidAt || nowIso()).slice(0, 10))}
         ${renderDateField("Vencimento", "dueDate", String(payment?.dueDate || "").slice(0, 10))}
         <label class="field"><span>Nome do pagador</span><input name="payerName" value="${esc(payment?.payerName || "")}" placeholder="Pessoa ou empresa pagadora" /></label>
-        <label class="field"><span>Numero do recibo</span><input name="receiptNumber" value="${esc(payment?.receiptNumber || "")}" placeholder="Ex. REC-2026-001" /></label>
-        <label class="field full"><span>Referencia externa</span><input name="reference" value="${esc(payment?.reference || "")}" placeholder="ID Pix, banco ou identificador da transferencia" /></label>
-        <label class="field full"><span>Comprovante ou arquivo recebido</span><input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png" /><small>${payment?.receiptFileName ? `Arquivo atual: ${esc(payment.receiptFileName)}. Envie outro apenas para substituir.` : "PDF, JPG ou PNG de ate 10 MB."}</small></label>
+        <label class="field"><span>Número do recibo</span><input name="receiptNumber" value="${esc(payment?.receiptNumber || "")}" placeholder="Ex. REC-2026-001" /></label>
+        <label class="field full"><span>Referência externa</span><input name="reference" value="${esc(payment?.reference || "")}" placeholder="ID Pix, banco ou identificador da transferência" /></label>
+        <label class="field full"><span>Comprovante ou arquivo recebido</span><input name="receiptFile" type="file" accept="application/pdf,image/jpeg,image/png" /><small>${payment?.receiptFileName ? `Arquivo atual: ${esc(payment.receiptFileName)}. Envie outro apenas para substituir.` : "PDF, JPG ou PNG de até 10 MB."}</small></label>
         <label class="field full"><span>Observacoes internas</span><textarea name="notes">${esc(payment?.notes || "")}</textarea></label>
         <div class="actions full"><button class="button" type="submit">${payment ? "Atualizar registro" : "Salvar pagamento"}</button>${contract ? `<button class="button secondary" type="button" data-open-contract="${contract.id}">Abrir contrato</button>` : ""}<button class="button ghost" type="button" data-close-drawer>Cancelar</button></div>
       </form>
@@ -4102,8 +4201,8 @@ function renderProjectDrawer(id) {
           <section class="card">
             <p class="section-title">Registros internos do cliente</p>
             <form class="form-grid" data-interaction-form="${project.id}">
-              <label class="field"><span>Tipo</span><select name="type"><option>briefing recebido</option><option>reuniao</option><option>aprovacao</option><option>feedback</option><option>pagamento</option></select></label>
-              <label class="field"><span>Canal</span><select name="channel"><option>WhatsApp</option><option>E-mail</option><option>Reuniao</option><option>Instagram</option></select></label>
+              <label class="field"><span>Tipo</span><select name="type"><option>briefing recebido</option><option>reunião</option><option>aprovação</option><option>feedback</option><option>pagamento</option></select></label>
+              <label class="field"><span>Canal</span><select name="channel"><option>WhatsApp</option><option>E-mail</option><option>Reunião</option><option>Instagram</option></select></label>
               <label class="field"><span>Contato externo</span><input name="contact" placeholder="Nome do cliente" /></label>
               ${renderDateField("Data real", "occurredAt")}
               <label class="field full"><span>Resumo</span><textarea name="summary" required></textarea></label>
@@ -4153,7 +4252,7 @@ function renderSoldServiceDrawer(contractId) {
           <section class="card">
             <p class="section-title">Ambiente do projeto</p>
             <div class="detail-list">
-              <div class="detail-row"><span>Projeto</span><strong>${esc(item.project?.name || "Projeto nao criado")}</strong></div>
+              <div class="detail-row"><span>Projeto</span><strong>${esc(item.project?.name || "Projeto não criado")}</strong></div>
               <div class="detail-row"><span>Status</span>${statusBadge(item.project?.status || "active")}</div>
               <div class="detail-row"><span>Responsavel</span><strong>${esc(getActorName(item.project?.managerId || item.contract.createdBy))}</strong></div>
               <div class="detail-row"><span>Contrato</span><strong>${esc(item.contract.contractNumber)}</strong></div>
@@ -4178,7 +4277,7 @@ function renderSoldServiceDrawer(contractId) {
                   </div>
                 `).join("")}
               </div>
-            ` : empty("Projeto ainda nao criado para este servico", "▥")}
+            ` : empty("Projeto ainda não criado para este servico", "▥")}
           </section>
 
           <section class="card">
@@ -4205,18 +4304,18 @@ function renderSdrCommissionDrawer(id) {
   const summary = sdrCommissionSummary(id);
   return `
     <div class="drawer-backdrop" data-close-drawer>
-      <aside class="drawer" role="dialog" aria-modal="true" aria-label="Dashboard de comissoes por SDR" data-drawer-panel>
+      <aside class="drawer" role="dialog" aria-modal="true" aria-label="Dashboard de comissões por SDR" data-drawer-panel>
         <header class="drawer-head">
           <div>
             <h3>${esc(user.name)}</h3>
-            <p>Dashboard detalhado de comissoes, vendas e lotes</p>
+            <p>Dashboard detalhado de comissões, vendas e lotes</p>
           </div>
           <button class="icon-button" data-close-drawer type="button">x</button>
         </header>
         <div class="drawer-body">
           <div class="grid cards-3">
-            ${metricCard("Comissao total", brl(summary.totalCommissionCents), "$")}
-            ${metricCard("Disponivel", brl(summary.availableCents), "$")}
+            ${metricCard("Comissão total", brl(summary.totalCommissionCents), "$")}
+            ${metricCard("Disponível", brl(summary.availableCents), "$")}
             ${metricCard("Ciclo atual", `${summary.cycleCount} de 5`, "", (summary.cycleCount / 5) * 100)}
           </div>
           <div class="grid cards-3">
@@ -4226,8 +4325,8 @@ function renderSdrCommissionDrawer(id) {
           </div>
 
           <section class="card">
-            <p class="section-title">Comissoes individuais</p>
-            ${summary.commissions.length ? renderSdrCommissionTable(summary.commissions) : empty("Nenhuma comissao gerada para esta SDR", "$")}
+            <p class="section-title">Comissões individuais</p>
+            ${summary.commissions.length ? renderSdrCommissionTable(summary.commissions) : empty("Nenhuma comissão gerada para esta SDR", "$")}
           </section>
 
           <section class="card">
@@ -4249,7 +4348,7 @@ function renderSdrCommissionTable(items) {
   return `
     <div class="table-wrap compact-table">
       <table>
-        <thead><tr><th>Contrato</th><th>Cliente</th><th>Pagamento</th><th>Base</th><th>Taxa</th><th>Comissao</th><th>Status</th></tr></thead>
+        <thead><tr><th>Contrato</th><th>Cliente</th><th>Pagamento</th><th>Base</th><th>Taxa</th><th>Comissão</th><th>Status</th></tr></thead>
         <tbody>
           ${items.map((item) => {
             const contract = byId(state.contracts, item.contractId);
@@ -4376,6 +4475,7 @@ function bindAuth() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const errorBox = document.querySelector("[data-auth-error]");
+    const isInvitation = event.currentTarget.dataset.invitationMode === "true";
     if (form.get("newPassword") !== form.get("confirmPassword")) {
       errorBox.textContent = "As senhas não coincidem.";
       errorBox.hidden = false;
@@ -4384,14 +4484,22 @@ function bindAuth() {
     const tokens = new URLSearchParams(location.hash.replace(/^#/, ""));
     try {
       await postPortal("/api/portal-auth", {
-        action: "complete_recovery",
+        action: isInvitation ? "complete_invitation" : "complete_recovery",
         accessToken: tokens.get("access_token"),
         refreshToken: tokens.get("refresh_token"),
         newPassword: form.get("newPassword"),
       });
-      history.replaceState({}, "", `${location.pathname}${location.search.replace(/([?&])mode=recovery(&|$)/, "$1").replace(/[?&]$/, "")}`);
-      await bootstrapApp();
-      toast("Senha definida. Acesso liberado.");
+      history.replaceState({}, "", location.pathname);
+      if (isInvitation) {
+        currentUser = null;
+        authReady = true;
+        supabaseSyncReady = false;
+        render();
+        toast("Acesso criado. Agora entre com seu e-mail e senha.");
+      } else {
+        await bootstrapApp();
+        toast("Senha definida. Acesso liberado.");
+      }
     } catch (error) {
       errorBox.textContent = error.message;
       errorBox.hidden = false;
@@ -4735,7 +4843,7 @@ function bindForms() {
       });
     }
     saveState();
-    toast("Comprovante de comissao registrado.");
+    toast("Comprovante de comissão registrado.");
     render();
   });
 
@@ -5216,7 +5324,7 @@ async function createOpportunity(form, intent) {
   const id = uid("opp");
   const serviceIds = normalizeServiceIds(form.getAll("serviceIds"));
   const suggestedAmountCents = cents(form.get("suggestedAmount"));
-  if (intent === "submit" && !serviceIds.length) return toast("Selecione pelo menos um servico antes de pedir aprovacao.");
+  if (intent === "submit" && !serviceIds.length) return toast("Selecione pelo menos um servico antes de pedir aprovação.");
   if (intent === "submit" && suggestedAmountCents <= 0) return toast("Informe o valor proposto antes de pedir aprovação.");
   const suggestedDiscountPercent = percent(form.get("suggestedDiscount"));
   const requestedPaymentPlan = normalizePaymentPlan(form.get("requestedConditions"));
@@ -5297,11 +5405,11 @@ function mutateOpportunity(id, status, label, actionName, meta = {}) {
 
 async function updateOpportunityDetails(id, form, requestApproval = false) {
   const opp = byId(state.opportunities, id);
-  if (!opp) return toast("Oportunidade nao encontrada.");
-  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada nao pode ser alterada.");
+  if (!opp) return toast("Oportunidade não encontrada.");
+  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada não pode ser alterada.");
   if (isArchivedOpportunity(opp)) return toast("Restaure a oportunidade antes de altera-la.");
   const canUpdate = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && opp.sdrId === currentUser.id);
-  if (!canUpdate) return toast("Voce nao pode editar esta oportunidade.");
+  if (!canUpdate) return toast("Voce não pode editar esta oportunidade.");
   opp.clientName = form.get("clientName");
   opp.brandName = form.get("brandName") || form.get("clientName");
   opp.phone = form.get("phone");
@@ -5347,7 +5455,7 @@ async function updateOpportunityDetails(id, form, requestApproval = false) {
   opp.notes = opp.notes || "";
   opp.crmStatus = opp.crmStatus || "lead_mapped";
   opp.updatedAt = nowIso();
-  opp.timeline.unshift(event("opportunity_crm_updated", "Informacoes do CRM atualizadas", currentUser.id));
+  opp.timeline.unshift(event("opportunity_crm_updated", "Informações do CRM atualizadas", currentUser.id));
   addAudit("opportunity_crm_updated", "Opportunity", id, { crmStatus: opp.crmStatus });
   notifyOpportunityTeam(opp, `As informações da oportunidade de ${opp.clientName} foram atualizadas por ${currentUser.name}.`, {
     title: "Oportunidade atualizada",
@@ -5357,18 +5465,18 @@ async function updateOpportunityDetails(id, form, requestApproval = false) {
     await submitOpportunity(id);
     return;
   }
-  toast("Informacoes do CRM salvas.");
+  toast("Informações do CRM salvas.");
   drawer = { type: "opportunity", id };
   render();
 }
 
 function updateOpportunityCrmStatus(id, crmStatus) {
   const opp = byId(state.opportunities, id);
-  if (!opp) return toast("Oportunidade nao encontrada.");
-  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada nao pode ser alterada.");
+  if (!opp) return toast("Oportunidade não encontrada.");
+  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada não pode ser alterada.");
   if (isArchivedOpportunity(opp)) return toast("Restaure a oportunidade antes de altera-la.");
   const canUpdate = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && opp.sdrId === currentUser.id);
-  if (!canUpdate) return toast("Voce nao pode alterar esta oportunidade.");
+  if (!canUpdate) return toast("Voce não pode alterar esta oportunidade.");
   if (!crmStatusLabels[crmStatus] || opp.crmStatus === crmStatus) return;
   const previousStatus = opp.crmStatus || "lead_mapped";
   opp.crmStatus = crmStatus;
@@ -5387,11 +5495,11 @@ function updateOpportunityCrmStatus(id, crmStatus) {
 
 function updateOpportunityProgress(id, row) {
   const opp = byId(state.opportunities, id);
-  if (!opp || !row) return toast("Oportunidade nao encontrada.");
-  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada nao pode ser alterada.");
+  if (!opp || !row) return toast("Oportunidade não encontrada.");
+  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada não pode ser alterada.");
   if (isArchivedOpportunity(opp)) return toast("Restaure a oportunidade antes de altera-la.");
   const canUpdate = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && opp.sdrId === currentUser.id);
-  if (!canUpdate) return toast("Voce nao pode alterar esta oportunidade.");
+  if (!canUpdate) return toast("Voce não pode alterar esta oportunidade.");
 
   const crmStatus = row.querySelector("[data-progress-crm-status]")?.value || "lead_mapped";
   if (!crmStatusLabels[crmStatus]) return toast("Selecione uma etapa valida.");
@@ -5467,10 +5575,10 @@ function archiveOpportunity(id) {
 
 function restoreOpportunity(id) {
   const opp = byId(state.opportunities, id);
-  if (!opp || !isArchivedOpportunity(opp)) return toast("Oportunidade arquivada nao encontrada.");
-  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada pelo gestor nao pode ser restaurada.");
+  if (!opp || !isArchivedOpportunity(opp)) return toast("Oportunidade arquivada não encontrada.");
+  if (isTerminallyRejected(opp)) return toast("Uma oportunidade recusada pelo gestor não pode ser restaurada.");
   const canRestore = currentUser.role === "admin_manager" || opp.sdrId === currentUser.id;
-  if (!canRestore) return toast("Voce nao pode restaurar esta oportunidade.");
+  if (!canRestore) return toast("Voce não pode restaurar esta oportunidade.");
   opp.status = opp.archivedFromStatus && opp.archivedFromStatus !== "cancelled" ? opp.archivedFromStatus : "draft";
   opp.archivedAt = null;
   opp.updatedAt = nowIso();
@@ -5506,7 +5614,7 @@ async function markNotificationRead(id, { rerender = true } = {}) {
 async function markAllNotificationsRead() {
   const unread = visibleNotifications().filter((item) => !item.read);
   for (const item of unread) await markNotificationRead(item.id, { rerender: false });
-  toast("Notificacoes marcadas como lidas.");
+  toast("Notificações marcadas como lidas.");
   render();
 }
 
@@ -5524,11 +5632,11 @@ async function openNotification(id) {
 
 async function submitOpportunity(id) {
   let current = byId(state.opportunities, id);
-  if (isTerminallyRejected(current)) return toast("Uma oportunidade recusada nao pode voltar para aprovacao.");
-  if (isArchivedOpportunity(current)) return toast("Restaure a oportunidade antes de pedir aprovacao.");
+  if (isTerminallyRejected(current)) return toast("Uma oportunidade recusada não pode voltar para aprovação.");
+  if (isArchivedOpportunity(current)) return toast("Restaure a oportunidade antes de pedir aprovação.");
   const canSubmit = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && current?.sdrId === currentUser.id);
-  if (!canSubmit) return toast("Apenas o gestor ou a SDR responsavel pode enviar a condicao para aprovacao.");
-  if (!canRequestConditionApproval(current)) return toast("Esta oportunidade nao pode ser enviada para aprovacao neste status.");
+  if (!canSubmit) return toast("Apenas o gestor ou a SDR responsavel pode enviar a condição para aprovação.");
+  if (!canRequestConditionApproval(current)) return toast("Esta oportunidade não pode ser enviada para aprovação neste status.");
   const missing = conditionApprovalMissingFields(current);
   if (missing.length) return toast(`Complete ${missing.join(", ")} antes de pedir aprovação.`);
   if (supabaseSyncReady) {
@@ -5541,7 +5649,7 @@ async function submitOpportunity(id) {
         expectedVersion: Number(current._version || 1),
       });
       await initSupabaseSync();
-      toast("Pedido de aprovacao enviado para a fila do gestor.");
+      toast("Pedido de aprovação enviado para a fila do gestor.");
       render();
       return;
     } catch (error) {
@@ -5550,11 +5658,11 @@ async function submitOpportunity(id) {
       return;
     }
   }
-  const opp = mutateOpportunity(id, "pending_approval", "Pedido de aprovacao da condicao enviado", "opportunity_submitted");
+  const opp = mutateOpportunity(id, "pending_approval", "Pedido de aprovação da condição enviado", "opportunity_submitted");
   if (!opp) return;
   addNotification(`Nova solicitação enviada por ${getActorName(opp.sdrId)}.`, { recipientRole: "admin_manager" });
   saveState();
-  toast("Pedido de aprovacao enviado para a fila do gestor.");
+  toast("Pedido de aprovação enviado para a fila do gestor.");
   render();
 }
 
@@ -5569,7 +5677,7 @@ async function submitApprovalFollowAction(id, form, action) {
   if (action === "approved" || action === "approved_with_changes") return await approveOpportunity(id, action, payload);
   if (action === "needs_information") return await needsInformation(id, payload);
   if (action === "rejected") return await rejectOpportunity(id, payload);
-  return toast("Acao invalida.");
+  return toast("Ação invalida.");
 }
 
 function submitOpportunityFollowAction(id, formElement) {
@@ -5597,9 +5705,9 @@ function applyFollowAction(opp, payload) {
 
 async function approveOpportunity(id, mode, payload = {}) {
   const opp = byId(state.opportunities, id);
-  if (!opp) return toast("Oportunidade nao encontrada.");
+  if (!opp) return toast("Oportunidade não encontrada.");
   const changed = mode === "approved_with_changes";
-  const reason = payload.reason || (changed ? "" : "Aprovado sem alteracao.");
+  const reason = payload.reason || (changed ? "" : "Aprovado sem alteração.");
   if (changed && !reason) return toast("A justificativa e obrigatoria.");
   const discountPercent = discountPercentForOpportunity(opp);
   const suggestedNetAmountCents = netAmountAfterDiscount(opp.suggestedAmountCents, discountPercent);
@@ -5618,9 +5726,9 @@ async function approveOpportunity(id, mode, payload = {}) {
       await initSupabaseSync();
       const refreshed = byId(state.opportunities, id);
       applyFollowAction(refreshed, payload);
-      refreshed?.timeline?.unshift(event("approval_follow_action_set", `Proxima acao definida: ${payload.followAction || "-"}`, currentUser.id, { nextActionDate: payload.nextActionDate || null }));
+      refreshed?.timeline?.unshift(event("approval_follow_action_set", `Próxima acao definida: ${payload.followAction || "-"}`, currentUser.id, { nextActionDate: payload.nextActionDate || null }));
       await saveState();
-      toast("Condicao aprovada: contrato e projeto criados pelo Supabase.");
+      toast("Condição aprovada: contrato e projeto criados pelo Supabase.");
       render();
       return;
     } catch (error) {
@@ -5652,12 +5760,12 @@ async function approveOpportunity(id, mode, payload = {}) {
   };
   state.conditions.unshift(condition);
   applyFollowAction(opp, payload);
-  mutateOpportunity(id, "commercial_condition_approved", changed ? "Condicao aprovada com alteracoes" : "Condicao aprovada sem alteracao", mode, { conditionId: condition.id, reason });
+  mutateOpportunity(id, "commercial_condition_approved", changed ? "Condição aprovada com alterações" : "Condição aprovada sem alteração", mode, { conditionId: condition.id, reason });
   const contract = ensureCommercialContract(opp, condition);
   createPlanningProject(opp, condition);
   addNotification(`Condição aprovada para ${opp.clientName}; contrato ${contract.contractNumber} aberto para planejamento.`, { recipientUserId: opp.sdrId });
   saveState();
-  toast("Condicao aprovada: contrato aberto para planejamento do gestor.");
+  toast("Condição aprovada: contrato aberto para planejamento do gestor.");
   render();
 }
 
@@ -5683,9 +5791,9 @@ async function needsInformation(id, payload = {}) {
       await initSupabaseSync();
       const refreshed = byId(state.opportunities, id);
       applyFollowAction(refreshed, payload);
-      refreshed?.timeline?.unshift(event("approval_needs_information", `Gestor solicitou mais informacoes: ${reason}`, currentUser.id));
+      refreshed?.timeline?.unshift(event("approval_needs_information", `Gestor solicitou mais informações: ${reason}`, currentUser.id));
       await saveState();
-      toast("Pedido de informacao enviado.");
+      toast("Pedido de informação enviado.");
       render();
       return;
     } catch (error) {
@@ -5695,10 +5803,10 @@ async function needsInformation(id, payload = {}) {
     }
   }
   applyFollowAction(opp, payload);
-  mutateOpportunity(id, "needs_information", `Gestor solicitou mais informacoes: ${reason}`, "approval_needs_information", { reason });
+  mutateOpportunity(id, "needs_information", `Gestor solicitou mais informações: ${reason}`, "approval_needs_information", { reason });
   addNotification(`O gestor solicitou informações adicionais em ${opp.clientName}.`, { recipientUserId: opp.sdrId });
   saveState();
-  toast("Pedido de informacao enviado.");
+  toast("Pedido de informação enviado.");
   render();
 }
 
@@ -5706,7 +5814,7 @@ async function rejectOpportunity(id, payload = {}) {
   const reason = payload.reason || "";
   if (!reason) return toast("A justificativa e obrigatoria.");
   const opp = byId(state.opportunities, id);
-  if (!opp) return toast("Oportunidade nao encontrada.");
+  if (!opp) return toast("Oportunidade não encontrada.");
   if (isTerminallyRejected(opp)) return toast("Esta oportunidade ja foi recusada e arquivada.");
   if (supabaseSyncReady) {
     try {
@@ -5754,12 +5862,12 @@ function answerInformation(id, follow = {}) {
   mutateOpportunity(id, "pending_approval", `SDR respondeu pedido de informação: ${answer}`, "information_answered", { answer });
   addNotification(`Informações complementares enviadas por ${getActorName(opp.sdrId)} em ${opp.clientName}.`, { recipientRole: "admin_manager" });
   saveState();
-  toast("Resposta enviada para nova analise.");
+  toast("Resposta enviada para nova análise.");
   render();
 }
 
 function presentToClient(id) {
-  mutateOpportunity(id, "awaiting_client_response", "Condicao apresentada ao cliente", "condition_presented_to_client");
+  mutateOpportunity(id, "awaiting_client_response", "Condição apresentada ao cliente", "condition_presented_to_client");
   toast("Retorno do cliente liberado para registro.");
   render();
 }
@@ -5881,7 +5989,7 @@ function sendProposal(id) {
   const opp = contract && byId(state.opportunities, contract.opportunityId);
   if (!contract || !opp) return toast("Contrato inexistente.");
   if (currentUser.role !== "sdr" || opp.sdrId !== currentUser.id) return toast("Apenas a SDR vinculada pode enviar esta proposta.");
-  if (!contract.proposalFileName) return toast("A proposta ainda nao foi anexada pelo gestor.");
+  if (!contract.proposalFileName) return toast("A proposta ainda não foi anexada pelo gestor.");
   contract.status = "proposal_sent";
   contract.proposalSentAt = nowIso();
   mutateOpportunity(opp.id, "awaiting_client_response", `Proposta ${contract.proposalFileName} enviada para a cliente`, "proposal_sent_to_client", { contractId: id });
@@ -5894,7 +6002,7 @@ function sendProposal(id) {
 function createContract(opportunityId) {
   const opp = byId(state.opportunities, opportunityId);
   const condition = activeCondition(opportunityId);
-  if (!condition) return toast("Bloqueado: nao existe condicao aprovada vigente.");
+  if (!condition) return toast("Bloqueado: não existe condição aprovada vigente.");
   const contract = ensureCommercialContract(opp, condition);
   saveState();
   toast(`Contrato ${contract.contractNumber} aberto para planejamento.`);
@@ -5907,9 +6015,9 @@ function sendContract(id) {
   if (!contract || !opp) return toast("Contrato inexistente.");
   const canManage = currentUser.role === "admin_manager";
   const canSdrAct = currentUser.role === "sdr" && opp.sdrId === currentUser.id;
-  if (!canManage && !canSdrAct) return toast("Voce nao tem acesso a este contrato.");
-  if (!contract.contractLink) return toast("O gestor ainda nao informou o link do contrato.");
-  if (!["contract_ready", "proposal_accepted"].includes(contract.status)) return toast("Contrato ainda nao esta pronto para envio.");
+  if (!canManage && !canSdrAct) return toast("Voce não tem acesso a este contrato.");
+  if (!contract.contractLink) return toast("O gestor ainda não informou o link do contrato.");
+  if (!["contract_ready", "proposal_accepted"].includes(contract.status)) return toast("Contrato ainda não esta pronto para envio.");
   contract.status = "sent";
   contract.sentAt = nowIso();
   opp.timeline.unshift(event("contract_sent", "Contrato enviado para assinatura da cliente", currentUser.id));
@@ -5963,7 +6071,7 @@ async function savePaymentRecord(formElement) {
   const form = new FormData(formElement);
   const contractId = String(form.get("contractId") || "");
   const contract = contractId ? byId(state.contracts, contractId) : null;
-  if (contractId && !contract) return toast("O contrato selecionado nao foi encontrado.");
+  if (contractId && !contract) return toast("O contrato selecionado não foi encontrado.");
   const paymentId = String(form.get("paymentId") || "") || uid("pay");
   const existing = byId(state.payments, paymentId);
   const amountCents = cents(form.get("amount"));
@@ -6031,7 +6139,7 @@ async function savePaymentRecord(formElement) {
     ? "Registro de pagamento atualizado."
     : contract
       ? "Pagamento registrado e vinculado ao contrato."
-      : "Pagamento manual salvo sem vinculo com o CRM.");
+      : "Pagamento manual salvo sem vínculo com o CRM.");
   drawer = null;
   currentRoute = "payments";
   render();
@@ -6062,19 +6170,19 @@ function confirmPayment(id) {
 }
 
 function createCommissionFromPayment(form) {
-  if (currentUser.role !== "admin_manager") return toast("Apenas o gestor pode registrar comissoes.");
+  if (currentUser.role !== "admin_manager") return toast("Apenas o gestor pode registrar comissões.");
   const payment = byId(state.payments, form.get("paymentId"));
   const contract = payment && byId(state.contracts, payment.contractId);
   const opp = contract && byId(state.opportunities, contract.opportunityId);
-  if (!payment || !contract || !opp) return toast("Pagamento ou contrato nao encontrado.");
-  if (payment.status !== "confirmed") return toast("A comissao so pode ser gerada para pagamentos confirmados.");
-  if (commissionForPayment(payment.id)) return toast("Este pagamento ja gerou uma comissao.");
+  if (!payment || !contract || !opp) return toast("Pagamento ou contrato não encontrado.");
+  if (payment.status !== "confirmed") return toast("A comissão so pode ser gerada para pagamentos confirmados.");
+  if (commissionForPayment(payment.id)) return toast("Este pagamento ja gerou uma comissão.");
   const sdrId = form.get("sdrId") || opp.sdrId;
   const rateBps = Number(form.get("rateBps"));
   if (!sdrId || ![500, 1000].includes(rateBps)) return toast("Informe a SDR e selecione 5% ou 10%.");
   const baseCents = cents(form.get("baseAmount"));
   const amountCents = cents(form.get("amount"));
-  if (!baseCents || !amountCents) return toast("Informe a base e o valor da comissao.");
+  if (!baseCents || !amountCents) return toast("Informe a base e o valor da comissão.");
   const summary = contractPaymentSummary(contract.id);
   const commission = {
     id: uid("com"),
@@ -6093,7 +6201,7 @@ function createCommissionFromPayment(form) {
     manualEntry: true,
   };
   state.commissions.unshift(commission);
-  opp.timeline.unshift(event("commission_created_from_payment", `Comissao registrada pelo gestor: ${brl(amountCents)} sobre base de ${brl(baseCents)}`, currentUser.id, { paymentId: payment.id, commissionId: commission.id, sdrId }));
+  opp.timeline.unshift(event("commission_created_from_payment", `Comissão registrada pelo gestor: ${brl(amountCents)} sobre base de ${brl(baseCents)}`, currentUser.id, { paymentId: payment.id, commissionId: commission.id, sdrId }));
   addAudit("commission_created_from_payment", "CommissionEntry", commission.id, { paymentId: payment.id, contractId: contract.id, sdrId });
   addNotification(`Uma comissão de ${brl(amountCents)} foi registrada para você no contrato de ${opp.clientName}.`, {
     recipientUserId: sdrId,
@@ -6104,21 +6212,21 @@ function createCommissionFromPayment(form) {
   });
   maybeCreateBatch(sdrId);
   saveState();
-  toast(`Comissao registrada para ${getActorName(sdrId)}: ${brl(amountCents)}.`);
+  toast(`Comissão registrada para ${getActorName(sdrId)}: ${brl(amountCents)}.`);
   render();
 }
 
 function updateCommission(id, row) {
-  if (currentUser.role !== "admin_manager") return toast("Apenas o gestor pode editar comissoes.");
+  if (currentUser.role !== "admin_manager") return toast("Apenas o gestor pode editar comissões.");
   const commission = byId(state.commissions, id);
-  if (!commission || !row) return toast("Comissao nao encontrada.");
+  if (!commission || !row) return toast("Comissão não encontrada.");
   const sdrId = row.querySelector("[data-commission-edit-sdr]")?.value;
   const rateBps = Number(row.querySelector("[data-commission-edit-rate]")?.value || 0);
   const baseCents = cents(row.querySelector("[data-commission-edit-base]")?.value);
   const amountCents = cents(row.querySelector("[data-commission-edit-amount]")?.value);
   const status = row.querySelector("[data-commission-edit-status]")?.value || commission.status;
   if (!sdrId || ![500, 1000].includes(rateBps) || !baseCents || !amountCents) {
-    return toast("Revise SDR, taxa, base e valor da comissao.");
+    return toast("Revise SDR, taxa, base e valor da comissão.");
   }
   commission.sdrId = sdrId;
   commission.rateBps = rateBps;
@@ -6137,7 +6245,7 @@ function updateCommission(id, row) {
     entityId: commission.id,
   });
   saveState();
-  toast("Comissao atualizada pelo gestor.");
+  toast("Comissão atualizada pelo gestor.");
   render();
 }
 
@@ -6161,7 +6269,7 @@ async function createManualProject(form) {
   const projectId = uid("prj");
   const responsibleId = form.get("sdrId") || MANAGEMENT_OWNER_ID;
   const stageNames = form.get("template") === "simple"
-    ? ["Briefing", "Planejamento", "Producao", "Revisao", "Entrega"]
+    ? ["Briefing", "Planejamento", "Produção", "Revisão", "Entrega"]
     : workflowTemplate;
   const opportunity = {
     id: opportunityId,
@@ -6300,7 +6408,7 @@ function validateSale(contractId) {
   attachContractToProject(contract, opp);
   addAudit("sale_validated", "Contract", contract.id, {});
   saveState();
-  toast("Venda validada: projeto atualizado. Gere a comissao pelos pagamentos confirmados.");
+  toast("Venda validada: projeto atualizado. Gere a comissão pelos pagamentos confirmados.");
   render();
 }
 
@@ -6419,7 +6527,7 @@ function createPlanningProject(opp, condition) {
       dueAt: addDays(7 * (index + 1)),
       events: [],
     })),
-    events: [event("project_created_from_approval", "Projeto criado automaticamente apos aprovacao da condicao comercial e abertura de contrato", currentUser.id)],
+    events: [event("project_created_from_approval", "Projeto criado automaticamente apos aprovação da condição comercial e abertura de contrato", currentUser.id)],
   };
   state.projects.unshift(project);
   addAudit("project_created_from_approval", "Project", project.id, { opportunityId: opp.id, conditionVersionId: condition?.id || null });
@@ -6447,16 +6555,16 @@ function exportCsv(type) {
   const commissionRows = state.commissions.filter((item) => currentUser.role === "admin_manager" || item.sdrId === currentUser.id);
   const exporters = {
     audit: () => [["data", "usuario", "acao", "entidade"], ...state.auditLogs.map((item) => [item.createdAt, getActorName(item.actorUserId), item.action, item.entityType])],
-    opportunities: () => [["cliente", "empresa_perfil", "instagram", "site", "whatsapp", "email", "segmento", "cidade", "origem", "sdr", "status_crm", "status_condicao", "o_que_vende", "publico", "sinal_operacao", "momento_atual", "problema_observado", "necessidade_relatada", "servicos", "prazo", "faixa_investimento", "contratacao_anterior", "urgencia", "valor_proposto", "desconto_percentual", "desconto_valor", "valor_liquido", "objecoes", "condicoes_solicitadas", "motivo_perda", "proxima_acao", "data_proxima_acao", "observacoes"], ...visibleOpportunities().map((item) => {
+    opportunities: () => [["cliente", "empresa_perfil", "instagram", "site", "whatsapp", "email", "segmento", "cidade", "origem", "sdr", "status_crm", "status_condição", "o_que_vende", "publico", "sinal_operacao", "momento_atual", "problema_observado", "necessidade_relatada", "serviços", "prazo", "faixa_investimento", "contratacao_anterior", "urgencia", "valor_proposto", "desconto_percentual", "desconto_valor", "valor_liquido", "objecoes", "condições_solicitadas", "motivo_perda", "próxima_acao", "data_próxima_acao", "observacoes"], ...visibleOpportunities().map((item) => {
       const discountPercent = discountPercentForOpportunity(item);
       return [item.clientName, item.brandName, item.instagram || "-", item.website || "-", item.phone || "-", item.email || "-", item.segment || "-", item.city || "-", item.origin || "-", getActorName(item.sdrId), crmStatusLabels[item.crmStatus] || item.crmStatus || "-", item.status, item.businessOffer || "-", item.targetAudience || "-", item.operationSignal || "-", item.currentMoment || "-", item.observedProblem || "-", item.reportedNeed || item.clientNeed || "-", serviceNamesForOpportunity(item), item.expectedDeadline || "-", item.investmentRange || "-", item.previousHiring || "-", item.urgency || "-", item.suggestedAmountCents, discountPercent, item.suggestedDiscountCents, netAmountAfterDiscount(item.suggestedAmountCents, discountPercent), item.objections || "-", paymentPlanLabel(normalizePaymentPlan(item.requestedConditions || item.suggestedPaymentTerms)), item.lossReason || "-", item.nextAction || "-", item.nextActionDate || "-", item.notes || "-"];
     })],
-    payments: () => [["contrato", "cliente", "valor", "metodo", "referencia", "comprovante", "status", "data", "observacao"], ...visiblePayments().map((item) => {
+    payments: () => [["contrato", "cliente", "valor", "metodo", "referência", "comprovante", "status", "data", "observacao"], ...visiblePayments().map((item) => {
       const contract = byId(state.contracts, item.contractId);
       const opp = contract && byId(state.opportunities, contract.opportunityId);
-      return [contract?.contractNumber || "Sem vinculo", item.externalClientName || opp?.clientName || "Registro externo", item.amountCents, item.method || "-", item.reference || "-", item.receiptFileName || "-", item.status, dateLabel(item.paidAt || item.dueDate || item.createdAt), item.notes || "-"];
+      return [contract?.contractNumber || "Sem vínculo", item.externalClientName || opp?.clientName || "Registro externo", item.amountCents, item.method || "-", item.reference || "-", item.receiptFileName || "-", item.status, dateLabel(item.paidAt || item.dueDate || item.createdAt), item.notes || "-"];
     })],
-    commissions: () => [["sdr", "contrato", "pagamento_id", "pagamento_valor", "base", "taxa_bps", "comissao", "status", "validada_em"], ...commissionRows.map((item) => {
+    commissions: () => [["sdr", "contrato", "pagamento_id", "pagamento_valor", "base", "taxa_bps", "comissão", "status", "validada_em"], ...commissionRows.map((item) => {
       const contract = byId(state.contracts, item.contractId);
       const payment = item.paymentId ? byId(state.payments, item.paymentId) : null;
       if (contract && !visibleContractIds.has(contract.id) && currentUser.role !== "admin_manager") return null;
@@ -6468,8 +6576,13 @@ function exportCsv(type) {
     })],
   };
   const rows = (exporters[type] || exporters.opportunities)();
-  const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const safeCsvCell = (cell) => {
+    let value = String(cell ?? "");
+    if (/^[\t\r\n ]*[=+\-@]/.test(value)) value = `'${value}`;
+    return `"${value.replaceAll('"', '""')}"`;
+  };
+  const csv = rows.map((row) => row.map(safeCsvCell).join(",")).join("\r\n");
+  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
@@ -6480,7 +6593,7 @@ function exportCsv(type) {
   saveState();
 }
 
-function toast(message) {
+function showToast(message) {
   clearTimeout(toastTimer);
   document.querySelector(".toast")?.remove();
   const node = document.createElement("div");
@@ -6488,6 +6601,14 @@ function toast(message) {
   node.textContent = message;
   document.body.appendChild(node);
   toastTimer = setTimeout(() => node.remove(), 3200);
+}
+
+function toast(message) {
+  if (supabaseSyncStatus === "Salvando alterações" && supabaseSyncQueued) {
+    pendingSuccessToast = String(message || "Alterações salvas.");
+    return;
+  }
+  showToast(message);
 }
 
 void bootstrapApp();

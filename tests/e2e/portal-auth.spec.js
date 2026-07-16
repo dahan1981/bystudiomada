@@ -29,8 +29,8 @@ test("dashboard uses everyday activity language and hides persistence details", 
   await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });
   await page.goto("/api/e2e-login");
 
-  await expect(page.getByText("A oportunidade de Cliente Aprovacao foi recusada e arquivada")).toBeVisible();
-  await expect(page.getByText("A oportunidade de Cliente Aprovacao foi enviada para aprovação")).toBeVisible();
+  await expect(page.getByText("A oportunidade de Cliente Aprovação foi recusada e arquivada")).toBeVisible();
+  await expect(page.getByText("A oportunidade de Cliente Aprovação foi enviada para aprovação")).toBeVisible();
   await expect(page.getByText("opportunity_rejected")).toHaveCount(0);
   await expect(page.getByText("opportunity_submitted")).toHaveCount(0);
 
@@ -77,14 +77,14 @@ test("manager reviews a pending condition from opportunity actions", async ({ pa
   await page.goto("/api/e2e-login");
   await goToRoute(page, "opportunities");
 
-  const pendingRow = page.locator("tr", { hasText: "Cliente Aprovacao" });
+  const pendingRow = page.locator("tr", { hasText: "Cliente Aprovação" });
   await expect(pendingRow.getByRole("button", { name: "Analisar" })).toBeVisible();
   await pendingRow.getByRole("button", { name: "Analisar" }).click();
 
-  await expect(page.getByText("Condicao aguardando sua aprovacao", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Aprovar sem alteracao" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Aprovar com alteracoes" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Solicitar informacoes" })).toBeVisible();
+  await expect(page.getByText("Condição aguardando sua aprovação", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Aprovar sem alteração" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Aprovar com alterações" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Solicitar informações" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Recusar" })).toBeVisible();
   await page.locator("[data-drawer-panel] header [data-close-drawer]").click();
   await expect(page.locator("[data-drawer-panel]")).toHaveCount(0);
@@ -95,16 +95,16 @@ test("manager rejection archives and permanently locks the opportunity", async (
   await page.goto("/api/e2e-login");
   await goToRoute(page, "opportunities");
 
-  const pendingRow = page.locator("tr", { hasText: "Cliente Aprovacao" });
+  const pendingRow = page.locator("tr", { hasText: "Cliente Aprovação" });
   await pendingRow.getByRole("button", { name: "Analisar" }).click();
   await page.locator('[data-approval-action="rejected"]').click();
-  await expect(page.getByText("Esta decisao e definitiva.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Esta decisão é definitiva.", { exact: false })).toBeVisible();
   await expect(page.locator('select[name="followAction"]')).toHaveCount(0);
   await expect(page.locator('input[name="nextActionDate"]')).toHaveCount(0);
   await page.getByRole("button", { name: "Recusar e arquivar" }).click();
 
   await expect(page.getByRole("heading", { name: "Oportunidades arquivadas" })).toBeVisible();
-  const archivedRow = page.locator("tr", { hasText: "Cliente Aprovacao" });
+  const archivedRow = page.locator("tr", { hasText: "Cliente Aprovação" });
   await expect(archivedRow.getByText("Bloqueada")).toBeVisible();
   await expect(archivedRow.getByRole("button", { name: "Restaurar" })).toHaveCount(0);
   await archivedRow.getByRole("button", { name: "Ver historico" }).click();
@@ -119,13 +119,13 @@ test("manager sends a draft condition to the real approval state", async ({ page
 
   let progressRow = page.locator('[data-progress-row="opp-active"]');
   await progressRow.getByRole("button", { name: "Pedir aprovação" }).click();
-  await expect(page.getByText("Pedido de aprovacao enviado para a fila do gestor.")).toBeVisible();
+  await expect(page.getByText("Pedido de aprovação enviado para a fila do gestor.")).toBeVisible();
 
   progressRow = page.locator('[data-progress-row="opp-active"]');
   await expect(progressRow.getByRole("button", { name: "Revisar condição" })).toBeVisible();
   await progressRow.getByRole("button", { name: "Revisar condição" }).click();
-  await expect(page.getByText("Condicao aguardando sua aprovacao", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Aprovar sem alteracao" })).toBeVisible();
+  await expect(page.getByText("Condição aguardando sua aprovação", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Aprovar sem alteração" })).toBeVisible();
 });
 
 test("manager completes the repaired operational flows", async ({ page, request }) => {
@@ -157,9 +157,9 @@ test("manager completes the repaired operational flows", async ({ page, request 
 
   await goToRoute(page, "approvals");
   await page.getByRole("button", { name: "Decidir" }).click();
-  await page.getByRole("button", { name: "Aprovar sem alteracao" }).click();
-  await page.getByRole("button", { name: "Confirmar aprovacao" }).click();
-  await expect(page.getByText("Condicao aprovada", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Aprovar sem alteração" }).click();
+  await page.getByRole("button", { name: "Confirmar aprovação" }).click();
+  await expect(page.getByText("Condição aprovada", { exact: true }).first()).toBeVisible();
   await page.locator("[data-drawer-panel] header [data-close-drawer]").click();
 
   await goToRoute(page, "opportunities");
@@ -172,10 +172,10 @@ test("manager completes the repaired operational flows", async ({ page, request 
   await page.locator('[data-restore-opportunity="opp-active"]').click();
   await expect(page.getByRole("heading", { name: "Oportunidades" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Notificacoes" }).click();
-  await expect(page.getByRole("heading", { name: "Notificacoes" })).toBeVisible();
+  await page.getByRole("button", { name: "Notificações" }).click();
+  await expect(page.getByRole("heading", { name: "Notificações" })).toBeVisible();
   await page.locator('[data-read-notification="notification-1"]').click();
-  await expect(page.getByText("0 nao lida(s)")).toBeVisible();
+  await expect(page.getByText("0 não lida(s)")).toBeVisible();
 
   await goToRoute(page, "payments");
   await page.getByRole("button", { name: /Novo pagamento/ }).click();
@@ -183,15 +183,15 @@ test("manager completes the repaired operational flows", async ({ page, request 
   await page.getByLabel("Cliente ou origem do pagamento *").fill("Pagamento Avulso E2E");
   await page.getByLabel("Valor registrado").fill("1.250,00");
   await page.getByLabel("Nome do pagador").fill("Cliente Financeiro LTDA");
-  await page.getByLabel("Numero do recibo").fill("REC-TESTE-001");
+  await page.getByLabel("Número do recibo").fill("REC-TESTE-001");
   await expect(page.locator('input[type="date"], input[type="datetime-local"]')).toHaveCount(0);
   await page.getByRole("button", { name: "Salvar pagamento" }).click();
-  await expect(page.getByText("Pagamento manual salvo sem vinculo com o CRM.")).toBeVisible();
+  await expect(page.getByText("Pagamento manual salvo sem vínculo com o CRM.")).toBeVisible();
 
   let paymentRow = page.locator("tbody tr", { hasText: "Pagamento Avulso E2E" });
-  await expect(paymentRow.getByText("Sem vinculo")).toBeVisible();
+  await expect(paymentRow.getByText("Sem vínculo")).toBeVisible();
   await paymentRow.getByRole("button", { name: "Editar" }).click();
-  await page.getByLabel("Vinculo com o CRM").selectOption("ctr-1");
+  await page.getByLabel("Vínculo com o CRM").selectOption("ctr-1");
   await page.getByRole("button", { name: "Atualizar registro" }).click();
   await expect(page.getByText("Registro de pagamento atualizado.")).toBeVisible();
   paymentRow = page.locator("tbody tr", { hasText: "Pagamento Avulso E2E" });

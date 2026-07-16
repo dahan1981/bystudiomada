@@ -1,6 +1,21 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { assertNotificationEncoding, buildNotificationEmail } = require("../../lib/portal-email");
+const { assertNotificationEncoding, buildNotificationEmail, buildSdrInvitationEmail } = require("../../lib/portal-email");
+
+test("builds a personalized SDR invitation with a portal action link", () => {
+  const email = buildSdrInvitationEmail({
+    recipientName: "João Dahan",
+    recipientEmail: "joao@example.com",
+    actionLink: "https://bystudiomada.vercel.app/portal-mada/#access_token=test&refresh_token=test&type=invite",
+  });
+
+  assert.equal(email.subject, "Seu acesso ao Portal Comercial Mada");
+  assert.match(email.html, /Criar minha senha/);
+  assert.match(email.html, /João Dahan/);
+  assert.match(email.html, /joao@example\.com/);
+  assert.match(email.text, /Depois de definir a senha/);
+  assert.doesNotMatch(email.html, /localhost/);
+});
 
 test("builds a branded and safe Portal Mada notification email", () => {
   const email = buildNotificationEmail({

@@ -101,6 +101,9 @@ async function main() {
       data: Buffer.isBuffer(row.data) ? row.data.toString("base64") : row.data,
     }));
     const state = stateRows.find((row) => row.id === "portal-mada-main")?.data || {};
+    const relationalContracts = relational.contracts || [];
+    const relationalPayments = relational.customer_payments || [];
+    const relationalCommissions = relational.commissions || [];
     const totals = {
       users: state.users?.length || 0,
       opportunities: state.opportunities?.length || 0,
@@ -112,9 +115,10 @@ async function main() {
       attachments: normalizedAttachments.length,
       relationalOpportunities: relational.opportunities.length,
       storageObjects: storageInventory.rows.length,
-      contractedCents: (state.contracts || []).reduce((sum, item) => sum + Number(item.amountCents || 0), 0),
-      receivedCents: (state.payments || []).filter((item) => item.status === "confirmed").reduce((sum, item) => sum + Number(item.amountCents || 0), 0),
-      commissionsCents: (state.commissions || []).reduce((sum, item) => sum + Number(item.amountCents || 0), 0),
+      contractedCents: relationalContracts.reduce((sum, item) => sum + Number(item.amount_cents || 0), 0),
+      receivedCents: relationalPayments.filter((item) => item.status === "confirmed").reduce((sum, item) => sum + Number(item.amount_cents || 0), 0),
+      commissionsCents: relationalCommissions.reduce((sum, item) => sum + Number(item.amount_cents || 0), 0),
+      relationalTotalsSource: "relational_tables",
     };
     const backup = {
       format: "portal-mada-backup-v1",

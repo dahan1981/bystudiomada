@@ -23,6 +23,7 @@
 - Guardar o JSON, checksum e a pasta `.storage` em armazenamento externo privado.
 - O gate de produção deve usar `node tools/portal-backup.js --require-storage` com `SUPABASE_SECRET_KEY` disponível somente no ambiente seguro.
 - Validar o conjunto com `node tools/portal-verify-backup.js <backup.json>`; o comando confere também os hashes dos objetos privados.
+- Executar `node tools/portal-restore-drill.js <backup.json>` em uma conexão autorizada; o teste valida o checksum, a leitura das tabelas relacionais e a presença dos objetos no inventário sem alterar dados de produção.
 
 ## Recuperação
 
@@ -39,7 +40,9 @@
 2. A SDR define a própria senha pelo e-mail.
 3. Desativar uma conta bloqueia perfil, memberships e Auth.
 4. Recuperações são enviadas somente ao e-mail cadastrado.
-5. O gestor deve configurar MFA pelo aplicativo autenticador.
+5. O gestor deve configurar MFA pelo aplicativo autenticador antes de acessar dados.
+- `CRON_SECRET` protege o worker de e-mail e `RESEND_WEBHOOK_SECRET` valida os eventos de entrega da Resend. Ambos devem existir na Vercel antes do lançamento.
+- A rotação de `DATABASE_URL`, `SUPABASE_SECRET_KEY`, chaves Resend e senhas iniciais deve ocorrer fora do Git e nunca ser repetida por chat.
 
 ## Piloto
 

@@ -8,6 +8,7 @@ const {
   setWorkspaceCookie,
 } = require("../lib/portal-auth-session");
 const { createPublicClient } = require("../lib/supabase-server");
+const { sendApiError } = require("../lib/portal-http");
 
 function bodyOf(request) {
   return typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
@@ -100,6 +101,26 @@ module.exports = async function handler(request, response) {
         return;
       }
       setAuthCookies(request, response, result.data.session);
+      response.status(200).json({ ok: true });
+      return;
+    }
+
+    if (action === "complete_invitation") {
+      const result = await client.auth.setSession({
+        access_token: String(body.accessToken || ""),
+        refresh_token: String(body.refreshToken || ""),
+      });
+      if (result.error || !result.data.session) {
+        response.status(400).json({ error: "O convite expirou. Peça ao gestor para enviar um novo convite." });
+        return;
+      }
+      const updated = await client.auth.updateUser({ password: String(body.newPassword || "") });
+      if (updated.error) {
+        response.status(400).json({ error: authError(updated.error) });
+        return;
+      }
+      await client.auth.signOut({ scope: "global" });
+      clearAuthCookies(request, response);
       response.status(200).json({ ok: true });
       return;
     }
@@ -211,9 +232,6 @@ module.exports = async function handler(request, response) {
 
     response.status(400).json({ error: "Ação de autenticação inválida." });
   } catch (error) {
-    response.status(error.statusCode || 500).json({
-      error: error.statusCode ? error.message : "Authentication unavailable",
-      detail: error.statusCode ? undefined : error.message,
-    });
+    sendApiError(request, response, error, "Não foi possível concluir a autenticação.", { context: "Portal authentication failed" });
   }
 };

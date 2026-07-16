@@ -22,5 +22,5 @@
 
 - Treinamento nunca deve receber dados reais de clientes.
 - Pagamentos no CRM são registros; nenhuma cobrança acontece pela plataforma.
-- Arquivos aceitos: PDF, JPG ou PNG de até 10 MB.
+- Arquivos aceitos: PDF, JPG ou PNG de até 10 MB. O envio acontece diretamente no armazenamento privado; a página pode informar o andamento até a confirmação.
 - Não compartilhe contas. Use recuperação de senha quando necessário.
