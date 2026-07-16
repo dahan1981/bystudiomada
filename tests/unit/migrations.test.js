@@ -19,4 +19,5 @@ test("all portal tables enable RLS and Storage remains private", () => {
   assert(sql.includes("portal_enrich_notification"), "approval notifications must be enriched with business context");
   assert(sql.includes("portal_enqueue_notification_email"), "new notifications must enqueue email deliveries");
   assert(sql.includes("unique (notification_id, recipient_user_id)"), "notification emails must be idempotent per recipient");
+  assert(sql.includes("U&'Notifica\\00E7\\00F5es por e-mail ativadas'"), "notification repair migration must preserve Unicode text independently of the terminal encoding");
 });

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildNotificationEmail } = require("../../lib/portal-email");
+const { assertNotificationEncoding, buildNotificationEmail } = require("../../lib/portal-email");
 
 test("builds a branded and safe Portal Mada notification email", () => {
   const email = buildNotificationEmail({
@@ -21,4 +21,24 @@ test("builds a branded and safe Portal Mada notification email", () => {
   assert.doesNotMatch(email.html, /Nina <Gestora>/);
   assert.match(email.text, /https:\/\/bystudiomada\.vercel\.app\/portal-mada\//);
   assert.match(email.text, /Mada Operação/);
+});
+
+test("preserves Portuguese special characters and blocks corrupted text", () => {
+  const email = buildNotificationEmail({
+    recipient_name: "João Dahan",
+    title: "Notificações por e-mail ativadas",
+    message: "O Portal Mada também envia aprovações e comissões.",
+    kind: "info",
+    organization_name: "Mada Operação",
+    notification_created_at: "2026-07-15T18:30:00.000Z",
+  });
+
+  assert.match(email.html, /Notificações por e-mail ativadas/);
+  assert.match(email.html, /também envia aprovações e comissões/);
+  assert.match(email.text, /João Dahan/);
+  assert.doesNotMatch(email.html, /Notifica\?\?es|tamb\?m|comiss\?es/);
+  assert.throws(
+    () => assertNotificationEncoding("Notifica??es por e-mail"),
+    /caracteres inválidos/,
+  );
 });
