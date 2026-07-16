@@ -948,6 +948,83 @@ function addAudit(action, entityType, entityId, metadata = {}) {
   state.auditLogs.unshift(audit(currentUser?.id || "system", action, entityType, entityId, metadata));
 }
 
+function opportunityFromAudit(item) {
+  const metadata = item.metadata || {};
+  const entityType = String(item.entityType || "").toLowerCase();
+  if (entityType === "opportunity") return byId(state.opportunities, item.entityId);
+
+  let opportunityId = metadata.opportunityId || null;
+  if (entityType === "contract") opportunityId ||= byId(state.contracts, item.entityId)?.opportunityId;
+  if (entityType === "customerpayment") {
+    const payment = byId(state.payments, item.entityId);
+    opportunityId ||= payment?.opportunityId || byId(state.contracts, payment?.contractId)?.opportunityId;
+  }
+  if (entityType === "project") opportunityId ||= byId(state.projects, item.entityId)?.opportunityId;
+  if (entityType === "projectstage") {
+    opportunityId ||= byId(state.projects, metadata.projectId)?.opportunityId;
+  }
+  if (entityType === "commissionentry") {
+    const commission = byId(state.commissions, item.entityId);
+    opportunityId ||= byId(state.contracts, metadata.contractId || commission?.contractId)?.opportunityId;
+  }
+  return byId(state.opportunities, opportunityId);
+}
+
+function recentActivityText(item) {
+  const opportunity = opportunityFromAudit(item);
+  const clientName = opportunity?.clientName || opportunity?.brandName || "";
+  const opportunityTarget = clientName ? ` de ${clientName}` : "";
+  const contract = byId(state.contracts, item.entityId) || byId(state.contracts, item.metadata?.contractId);
+  const payment = byId(state.payments, item.entityId) || byId(state.payments, item.metadata?.paymentId);
+  const commission = byId(state.commissions, item.entityId);
+  const project = byId(state.projects, item.entityId) || byId(state.projects, item.metadata?.projectId);
+  const paymentAmount = payment?.amountCents ? ` de ${brl(payment.amountCents)}` : "";
+  const commissionAmount = commission?.amountCents ? ` de ${brl(commission.amountCents)}` : "";
+  const crmStatus = crmStatusLabels[item.metadata?.crmStatus] || "uma nova etapa";
+  const projectStatus = statusLabels[item.metadata?.status] || "um novo status";
+  const descriptions = {
+    opportunity_created: `A oportunidade${opportunityTarget} foi criada`,
+    opportunity_submitted: `A oportunidade${opportunityTarget} foi enviada para aprovação`,
+    opportunity_crm_updated: `As informações da oportunidade${opportunityTarget} foram atualizadas`,
+    crm_status_updated: `A oportunidade${opportunityTarget} avançou para ${crmStatus}`,
+    opportunity_progress_updated: `O andamento da oportunidade${opportunityTarget} foi atualizado`,
+    opportunity_duplicated: `A oportunidade${opportunityTarget} foi duplicada`,
+    opportunity_archived: `A oportunidade${opportunityTarget} foi arquivada`,
+    opportunity_restored: `A oportunidade${opportunityTarget} voltou para a operação`,
+    approved: `A condição comercial${opportunityTarget} foi aprovada`,
+    approved_with_changes: `A condição comercial${opportunityTarget} foi aprovada com alterações`,
+    approval_needs_information: `O gestor pediu mais informações sobre a oportunidade${opportunityTarget}`,
+    information_answered: `As informações solicitadas sobre a oportunidade${opportunityTarget} foram enviadas`,
+    approval_rejected: `A oportunidade${opportunityTarget} foi recusada e arquivada`,
+    opportunity_rejected: `A oportunidade${opportunityTarget} foi recusada e arquivada`,
+    condition_presented_to_client: `A condição comercial${opportunityTarget} foi apresentada ao cliente`,
+    client_accepted_condition: `O cliente aceitou a condição comercial${opportunityTarget}`,
+    client_requested_revision: `O cliente pediu alterações na condição${opportunityTarget}`,
+    client_declined: `O cliente recusou a condição${opportunityTarget}`,
+    contract_pipeline_created: `O contrato${opportunityTarget} entrou em planejamento`,
+    contract_planning_updated: `O planejamento do contrato${opportunityTarget} foi atualizado`,
+    proposal_sent_to_client: `A proposta${opportunityTarget} foi enviada ao cliente`,
+    contract_sent: `O contrato ${contract?.contractNumber || ""}${opportunityTarget} foi enviado`.replace("  ", " "),
+    contract_signed: `O contrato ${contract?.contractNumber || ""}${opportunityTarget} foi assinado`.replace("  ", " "),
+    customer_payment_created: `Um pagamento${paymentAmount}${opportunityTarget} foi programado`,
+    customer_payment_registered: `Um pagamento${paymentAmount}${opportunityTarget} foi registrado`,
+    customer_payment_updated: `O registro de pagamento${paymentAmount}${opportunityTarget} foi atualizado`,
+    customer_payment_confirmed: `Um pagamento${paymentAmount}${opportunityTarget} foi confirmado`,
+    commission_created_from_payment: `Uma comissão${commissionAmount}${opportunityTarget} foi registrada`,
+    commission_manually_updated: `Uma comissão${commissionAmount}${opportunityTarget} foi atualizada`,
+    commission_receipt_registered: "Um comprovante de comissão foi anexado",
+    payout_batch_created: "Um novo ciclo de pagamento de comissão foi criado",
+    payout_batch_paid: "Um ciclo de comissão foi marcado como pago",
+    manual_project_created: `O projeto ${project?.name || "manual"} foi criado`,
+    project_created_from_approval: `O projeto${opportunityTarget} foi criado após a aprovação`,
+    project_status_changed: `O projeto ${project?.name || ""} passou para ${projectStatus}`.replace("  ", " "),
+    project_stage_status_changed: `Uma etapa do projeto${opportunityTarget} foi atualizada`,
+    sale_validated: `A venda${opportunityTarget} foi validada`,
+    csv_exported: "Um relatório foi exportado",
+  };
+  return descriptions[item.action] || `Uma atualização${opportunityTarget} foi registrada`;
+}
+
 function addNotification(text, { recipientUserId = null, recipientRole = null, title = "Atualizacao", kind = "info", entityType = null, entityId = null } = {}) {
   const roleRecipients = recipientRole
     ? state.users.filter((user) => user.role === recipientRole && user.active !== false).map((user) => user.id)
@@ -1595,7 +1672,7 @@ function renderDashboard() {
       </section>
       <section class="card">
         <div class="section-head"><div><h3>Atividades recentes</h3><p>Últimas movimentações da equipe.</p></div></div>
-        ${recentActivity.length ? `<div class="activity-list">${recentActivity.map((item) => `<div class="activity-item">${renderIcon("history")}<div><strong>${esc(item.action || "Atualização registrada")}</strong><span>${dateLabel(item.createdAt)} · ${esc(getActorName(item.actorId))}</span></div></div>`).join("")}</div>` : empty("Nenhuma atividade recente", "◌", "As próximas atualizações aparecerão aqui.")}
+        ${recentActivity.length ? `<div class="activity-list">${recentActivity.map((item) => `<div class="activity-item">${renderIcon("history")}<div><strong>${esc(recentActivityText(item))}</strong><span>${dateLabel(item.createdAt)} · ${esc(getActorName(item.actorUserId || item.actorId))}</span></div></div>`).join("")}</div>` : empty("Nenhuma atividade recente", "◌", "As próximas atualizações aparecerão aqui.")}
       </section>
     </div>
   `;
@@ -3019,7 +3096,7 @@ function renderSettings() {
       </div>
     </div>
 
-    <div class="grid cards-2 settings-bottom">
+    <div class="settings-bottom">
       <section class="card">
         <div class="section-head"><div><h3>Notificações</h3><p>Movimentações que exigem atenção.</p></div></div>
         ${visibleNotifications().length ? `<div class="timeline">
@@ -3031,13 +3108,6 @@ function renderSettings() {
           `).join("")}
         </div>` : empty("Nenhuma notificação", "◌", "As novas solicitações aparecerão aqui.")}
         <div class="actions"><button class="button secondary" data-route="notifications">Abrir central</button></div>
-      </section>
-      <section class="card sync-card">
-        <div class="section-head"><div><h3>Persistência</h3><p>Dados e anexos protegidos no ambiente da Mada.</p></div>${renderIcon("database")}</div>
-        <div class="detail-row"><span>Status</span><strong>${esc(supabaseSyncStatus)}</strong></div>
-        <div class="detail-row"><span>Projeto</span><strong>${esc(new URL(SUPABASE_CONFIG.url).host)}</strong></div>
-        <div class="detail-row"><span>Sessão</span><strong>Protegida por cookie HTTP-only</strong></div>
-        <p class="form-note">O navegador mantém apenas uma cópia operacional. A fonte oficial é o banco conectado ao portal.</p>
       </section>
     </div>
   `;

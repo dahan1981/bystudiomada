@@ -25,6 +25,20 @@ test("login screen does not overflow the viewport", async ({ page }) => {
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "./assets/mada-icon.svg");
 });
 
+test("dashboard uses everyday activity language and hides persistence details", async ({ page, request }) => {
+  await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });
+  await page.goto("/api/e2e-login");
+
+  await expect(page.getByText("A oportunidade de Cliente Aprovacao foi recusada e arquivada")).toBeVisible();
+  await expect(page.getByText("A oportunidade de Cliente Aprovacao foi enviada para aprovação")).toBeVisible();
+  await expect(page.getByText("opportunity_rejected")).toHaveCount(0);
+  await expect(page.getByText("opportunity_submitted")).toHaveCount(0);
+
+  await goToRoute(page, "settings");
+  await expect(page.getByRole("heading", { name: "Persistência" })).toHaveCount(0);
+  await expect(page.getByText("Sincronizado com Supabase")).toHaveCount(0);
+});
+
 test("primary routes and workspaces do not overflow the viewport", async ({ page, request }) => {
   test.setTimeout(60_000);
   await request.post("/api/e2e-reset", { headers: { Cookie: "portal-e2e=manager" } });

@@ -46,7 +46,13 @@ function createTestState() {
     approvalRequests: [{ id: "approval-1", opportunityId: "opp-approval", requestedBy: "sdr-1", status: "pending", requestedAt: now }],
     conditions: [],
     contracts: [{ id: "ctr-1", opportunityId: "opp-contract", contractNumber: "MADA-TESTE", status: "signed", amountCents: 800000, paymentPlan: "50_50", paymentTerms: "50% / 50%", createdAt: now, _version: 1 }],
-    payments: [], commissions: [], payoutBatches: [], files: [], auditLogs: [],
+    payments: [], commissions: [], payoutBatches: [], files: [],
+    auditLogs: [
+      { id: "audit-1", actorUserId: "manager-1", action: "opportunity_rejected", entityType: "Opportunity", entityId: "opp-approval", metadata: {}, createdAt: now },
+      { id: "audit-2", actorUserId: "sdr-1", action: "opportunity_submitted", entityType: "Opportunity", entityId: "opp-approval", metadata: {}, createdAt: now },
+      { id: "audit-3", actorUserId: "sdr-1", action: "opportunity_crm_updated", entityType: "Opportunity", entityId: "opp-active", metadata: {}, createdAt: now },
+      { id: "audit-4", actorUserId: "sdr-1", action: "crm_status_updated", entityType: "Opportunity", entityId: "opp-active", metadata: { crmStatus: "follow_up" }, createdAt: now },
+    ],
     projects: [{
       id: "prj-1", opportunityId: "opp-contract", contractId: "ctr-1", sdrId: "sdr-1", managerId: "manager-1",
       name: "Site Cliente Financeiro", status: "active", targetEndAt: "2026-09-01", currentStageId: "stg-1", _version: 1,

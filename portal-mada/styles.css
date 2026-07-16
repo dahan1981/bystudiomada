@@ -2604,10 +2604,6 @@ summary:focus-visible {
   margin-top: 16px;
 }
 
-.sync-card .section-head > svg {
-  color: var(--brand);
-}
-
 /* Opportunity lifecycle */
 .opportunity-workflow {
   display: grid;
