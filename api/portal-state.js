@@ -1,5 +1,6 @@
 const { getPortalSession, isSameOrigin } = require("../lib/portal-auth-session");
 const { withClient } = require("../lib/portal-db");
+const { dispatchPortalNotificationEmails } = require("../lib/portal-email");
 const { readRelationalState, writeRelationalState } = require("../lib/portal-relational");
 
 module.exports = async function handler(request, response) {
@@ -29,6 +30,9 @@ module.exports = async function handler(request, response) {
 
     const payload = typeof request.body === "string" ? JSON.parse(request.body || "{}") : request.body || {};
     const data = await withClient((client) => writeRelationalState(client, payload.data || {}, session));
+    await dispatchPortalNotificationEmails(session.user.organizationId).catch((error) => {
+      console.error("Portal notification dispatch unavailable", { message: error.message });
+    });
     response.status(200).json({ data, workspace: data.activeWorkspace });
   } catch (error) {
     response.status(error.statusCode || 500).json({

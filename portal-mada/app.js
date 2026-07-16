@@ -1027,9 +1027,9 @@ function recentActivityText(item) {
 
 function addNotification(text, { recipientUserId = null, recipientRole = null, title = "Atualizacao", kind = "info", entityType = null, entityId = null } = {}) {
   const roleRecipients = recipientRole
-    ? state.users.filter((user) => user.role === recipientRole && user.active !== false).map((user) => user.id)
+    ? state.users.filter((user) => user.role === recipientRole && user.active !== false && user.id !== currentUser?.id).map((user) => user.id)
     : [];
-  const recipients = recipientUserId ? [recipientUserId] : roleRecipients.length ? roleRecipients : [null];
+  const recipients = recipientUserId && recipientUserId !== currentUser?.id ? [recipientUserId] : roleRecipients;
   recipients.forEach((targetUserId) => state.notifications.unshift({
     id: uid("ntf"),
     title,
@@ -1043,6 +1043,20 @@ function addNotification(text, { recipientUserId = null, recipientRole = null, t
     createdBy: currentUser?.id || "system",
     createdAt: nowIso(),
   }));
+}
+
+function notifyOpportunityTeam(opportunity, text, { title = "Atualização de oportunidade", kind = "opportunity" } = {}) {
+  if (!opportunity || !currentUser) return;
+  if (currentUser.role === "sdr") {
+    addNotification(text, { recipientRole: "admin_manager", title, kind, entityType: "opportunity", entityId: opportunity.id });
+    return;
+  }
+  const assignedUser = byId(state.users, opportunity.sdrId);
+  if (assignedUser?.role === "sdr" && assignedUser.active !== false) {
+    addNotification(text, { recipientUserId: assignedUser.id, title, kind, entityType: "opportunity", entityId: opportunity.id });
+    return;
+  }
+  addNotification(text, { recipientRole: "admin_manager", title, kind, entityType: "opportunity", entityId: opportunity.id });
 }
 
 function conditionToContractDraft(opp, condition, actorId, sequence = state.contracts.length + 1) {
@@ -1123,7 +1137,6 @@ function visibleNotifications() {
   return state.notifications.filter((item) => (
     item.recipientUserId === currentUser.id
     || (!item.recipientUserId && item.recipientRole === currentUser.role)
-    || item.createdBy === currentUser.id
   ));
 }
 
@@ -4712,6 +4725,15 @@ function bindForms() {
     state.files.unshift(file);
     if (batch) batch.receipt = file.name;
     addAudit("commission_receipt_registered", "Attachment", file.id, { payoutBatchId: file.payoutBatchId, sdrId: delegatedSdrId });
+    if (delegatedSdrId) {
+      addNotification(`Um novo comprovante de comissão foi disponibilizado para você: ${file.name}.`, {
+        recipientUserId: delegatedSdrId,
+        title: "Novo comprovante de comissão",
+        kind: "file",
+        entityType: "file",
+        entityId: file.id,
+      });
+    }
     saveState();
     toast("Comprovante de comissao registrado.");
     render();
@@ -5249,6 +5271,9 @@ async function createOpportunity(form, intent) {
   };
   state.opportunities.unshift(opp);
   addAudit("opportunity_created", "Opportunity", opp.id, {});
+  notifyOpportunityTeam(opp, `A oportunidade de ${opp.clientName} foi cadastrada por ${currentUser.name}.`, {
+    title: "Nova oportunidade cadastrada",
+  });
   await saveState();
   drawer = { type: "opportunity", id };
   if (intent === "submit") {
@@ -5324,6 +5349,9 @@ async function updateOpportunityDetails(id, form, requestApproval = false) {
   opp.updatedAt = nowIso();
   opp.timeline.unshift(event("opportunity_crm_updated", "Informacoes do CRM atualizadas", currentUser.id));
   addAudit("opportunity_crm_updated", "Opportunity", id, { crmStatus: opp.crmStatus });
+  notifyOpportunityTeam(opp, `As informações da oportunidade de ${opp.clientName} foram atualizadas por ${currentUser.name}.`, {
+    title: "Oportunidade atualizada",
+  });
   await saveState();
   if (requestApproval) {
     await submitOpportunity(id);
@@ -5347,6 +5375,10 @@ function updateOpportunityCrmStatus(id, crmStatus) {
   opp.updatedAt = nowIso();
   opp.timeline.unshift(event("crm_status_updated", `Status CRM alterado de ${crmStatusLabels[previousStatus] || previousStatus} para ${crmStatusLabels[crmStatus]}`, currentUser.id, { previousStatus, crmStatus }));
   addAudit("crm_status_updated", "Opportunity", id, { previousStatus, crmStatus });
+  notifyOpportunityTeam(opp, `${opp.clientName} avançou de ${crmStatusLabels[previousStatus] || previousStatus} para ${crmStatusLabels[crmStatus]}.`, {
+    title: "Novo andamento no CRM",
+    kind: "progress",
+  });
   saveState();
   toast("Status do CRM atualizado.");
   drawer = { type: "opportunity", id };
@@ -5380,6 +5412,11 @@ function updateOpportunityProgress(id, row) {
     nextActionDate: opp.nextActionDate,
   }));
   addAudit("opportunity_progress_updated", "Opportunity", id, { crmStatus, nextActionDate: opp.nextActionDate });
+  const nextActionText = opp.nextAction ? ` Próxima ação: ${opp.nextAction}${opp.nextActionDate ? ` em ${dateLabel(opp.nextActionDate)}` : ""}.` : "";
+  notifyOpportunityTeam(opp, `O andamento de ${opp.clientName} foi atualizado para ${crmStatusLabels[crmStatus]}.${nextActionText}`, {
+    title: "Andamento atualizado",
+    kind: "progress",
+  });
   saveState();
   toast("Andamento da oportunidade salvo.");
   render();
@@ -5980,6 +6017,15 @@ async function savePaymentRecord(formElement) {
     { paymentId: payment.id, contractId: contract?.id || null }
   ));
   addAudit(existing ? "customer_payment_updated" : "customer_payment_registered", "CustomerPayment", payment.id, { contractId: contract?.id || null, status: payment.status, recordOnly: true, recordMode: payment.recordMode });
+  if (opp?.sdrId) {
+    addNotification(`${existing ? "O registro do pagamento" : "Um pagamento"} de ${brl(payment.amountCents)} para ${opp.clientName} foi ${existing ? "atualizado" : "registrado"}.`, {
+      recipientUserId: opp.sdrId,
+      title: existing ? "Pagamento atualizado" : "Novo pagamento registrado",
+      kind: "payment",
+      entityType: "payment",
+      entityId: payment.id,
+    });
+  }
   await saveState();
   toast(existing
     ? "Registro de pagamento atualizado."
@@ -6001,6 +6047,15 @@ function confirmPayment(id) {
   const opp = contract && byId(state.opportunities, contract.opportunityId);
   opp?.timeline.unshift(event("external_payment_confirmed", `Pagamento externo confirmado: ${brl(payment.amountCents)}`, currentUser.id, { paymentId: id }));
   addAudit("customer_payment_confirmed", "CustomerPayment", id, {});
+  if (opp?.sdrId) {
+    addNotification(`O pagamento de ${brl(payment.amountCents)} para ${opp.clientName} foi confirmado.`, {
+      recipientUserId: opp.sdrId,
+      title: "Pagamento confirmado",
+      kind: "payment",
+      entityType: "payment",
+      entityId: payment.id,
+    });
+  }
   saveState();
   toast("Registro de pagamento externo confirmado.");
   render();
@@ -6040,6 +6095,13 @@ function createCommissionFromPayment(form) {
   state.commissions.unshift(commission);
   opp.timeline.unshift(event("commission_created_from_payment", `Comissao registrada pelo gestor: ${brl(amountCents)} sobre base de ${brl(baseCents)}`, currentUser.id, { paymentId: payment.id, commissionId: commission.id, sdrId }));
   addAudit("commission_created_from_payment", "CommissionEntry", commission.id, { paymentId: payment.id, contractId: contract.id, sdrId });
+  addNotification(`Uma comissão de ${brl(amountCents)} foi registrada para você no contrato de ${opp.clientName}.`, {
+    recipientUserId: sdrId,
+    title: "Nova comissão disponível",
+    kind: "commission",
+    entityType: "commission",
+    entityId: commission.id,
+  });
   maybeCreateBatch(sdrId);
   saveState();
   toast(`Comissao registrada para ${getActorName(sdrId)}: ${brl(amountCents)}.`);
@@ -6067,6 +6129,13 @@ function updateCommission(id, row) {
   commission.updatedAt = nowIso();
   syncPayoutBatchTotals();
   addAudit("commission_manually_updated", "CommissionEntry", commission.id, { sdrId, rateBps, baseCents, amountCents, status });
+  addNotification(`Sua comissão foi atualizada para ${brl(amountCents)} e está com status ${statusLabels[status] || status}.`, {
+    recipientUserId: sdrId,
+    title: "Comissão atualizada",
+    kind: "commission",
+    entityType: "commission",
+    entityId: commission.id,
+  });
   saveState();
   toast("Comissao atualizada pelo gestor.");
   render();
@@ -6144,6 +6213,10 @@ async function createManualProject(form) {
   state.opportunities.unshift(opportunity);
   state.projects.unshift(project);
   addAudit("manual_project_created", "Project", projectId, { opportunityId, serviceIds, responsibleId });
+  notifyOpportunityTeam(opportunity, `O projeto ${project.name} foi criado e atribuído a você.`, {
+    title: "Novo projeto",
+    kind: "project",
+  });
   await saveState();
   toast("Projeto criado e salvo.");
   drawer = { type: "project", id: projectId };
@@ -6157,6 +6230,11 @@ function updateProjectStatus(projectId, status) {
   project.status = status;
   project.events.unshift(event("project_status_changed", `Status do projeto alterado de ${statusLabels[previousStatus] || previousStatus} para ${statusLabels[status] || status}`, currentUser.id));
   addAudit("project_status_changed", "Project", project.id, { previousStatus, status });
+  const opportunity = byId(state.opportunities, project.opportunityId);
+  notifyOpportunityTeam(opportunity, `O projeto ${project.name} passou para ${statusLabels[status] || status}.`, {
+    title: "Projeto atualizado",
+    kind: "project",
+  });
   saveState();
   toast("Status geral do projeto atualizado.");
   drawer = { type: "project", id: project.id };
@@ -6177,6 +6255,13 @@ async function updateProjectStageStatus(projectId, stageId, status) {
         expectedVersion: Number(stage._version || 1),
       });
       await initSupabaseSync();
+      const refreshedProject = byId(state.projects, projectId);
+      const refreshedOpportunity = byId(state.opportunities, refreshedProject?.opportunityId);
+      notifyOpportunityTeam(refreshedOpportunity, `A etapa ${stage.name} do projeto ${project.name} passou para ${statusLabels[status] || status}.`, {
+        title: "Etapa do projeto atualizada",
+        kind: "project",
+      });
+      await saveState();
       toast("Status da etapa atualizado.");
       render();
       return;
@@ -6193,6 +6278,11 @@ async function updateProjectStageStatus(projectId, stageId, status) {
   project.currentStageId = stage.id;
   project.events.unshift(event("project_stage_status_changed", `${stage.name}: ${statusLabels[previousStatus] || previousStatus} -> ${statusLabels[status] || status}`, currentUser.id));
   addAudit("project_stage_status_changed", "ProjectStage", stage.id, { projectId, previousStatus, status });
+  const opportunity = byId(state.opportunities, project.opportunityId);
+  notifyOpportunityTeam(opportunity, `A etapa ${stage.name} do projeto ${project.name} passou para ${statusLabels[status] || status}.`, {
+    title: "Etapa do projeto atualizada",
+    kind: "project",
+  });
   saveState();
   toast("Status da etapa atualizado.");
   drawer = { type: "project", id: project.id };
@@ -6283,6 +6373,13 @@ async function confirmPayoutBatchPayment(id, formElement) {
   state.files.unshift(file);
   addAudit("payout_batch_paid", "PayoutBatch", id, {});
   addAudit("commission_receipt_registered", "Attachment", file.id, { payoutBatchId: batch.id, sdrId: batch.sdrId });
+  addNotification(`O ciclo de comissão no valor de ${brl(batch.totalAmountCents)} foi pago. O comprovante já está disponível em Arquivos.`, {
+    recipientUserId: batch.sdrId,
+    title: "Comissão paga",
+    kind: "commission",
+    entityType: "payout_batch",
+    entityId: batch.id,
+  });
   saveState();
   toast("Lote marcado como pago e comprovante salvo em Arquivos.");
   drawer = null;

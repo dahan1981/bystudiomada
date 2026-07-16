@@ -1,4 +1,5 @@
 const { getPortalSession, isSameOrigin } = require("../lib/portal-auth-session");
+const { dispatchPortalNotificationEmails } = require("../lib/portal-email");
 const { createPublicClient } = require("../lib/supabase-server");
 
 function bodyOf(request) {
@@ -66,6 +67,9 @@ module.exports = async function handler(request, response) {
     }
 
     if (result.error) throw workflowError(result.error);
+    await dispatchPortalNotificationEmails(session.user.organizationId).catch((error) => {
+      console.error("Portal workflow notification dispatch unavailable", { message: error.message });
+    });
     response.status(200).json({ data: result.data ?? null });
   } catch (error) {
     response.status(error.statusCode || 500).json({

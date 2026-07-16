@@ -11,7 +11,9 @@ Os ambientes usam o mesmo projeto Supabase, mas todos os registros possuem `orga
 
 ## Configuração obrigatória na Vercel
 
-Consulte `.env.example`. `SUPABASE_SECRET_KEY` e `DATABASE_URL` são segredos exclusivamente de servidor. A publishable key pode ser usada no cliente, mas o portal atual acessa o Supabase por APIs próprias.
+Consulte `.env.example`. `SUPABASE_SECRET_KEY`, `DATABASE_URL` e `RESEND_API_KEY` são segredos exclusivamente de servidor. A publishable key pode ser usada no cliente, mas o portal atual acessa o Supabase por APIs próprias.
+
+Notificações novas geram entregas na fila privada `private.notification_email_deliveries`. O servidor envia pela Resend para o e-mail cadastrado no perfil e usa uma chave idempotente por entrega. `PORTAL_NOTIFICATION_FROM_EMAIL` permite um remetente exclusivo; quando ausente, o portal usa `CONTACT_FROM_EMAIL`.
 
 ## Comandos
 

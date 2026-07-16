@@ -35,6 +35,13 @@ test("production schema, RLS and private bucket are installed", { skip: !process
       where approval_status = 'rejected' and archived_at is null
     `);
     assert.equal(unarchivedRejections.rows[0].count, 0);
+    const emailOutbox = await pool.query("select to_regclass('private.notification_email_deliveries') as table_name");
+    assert.equal(emailOutbox.rows[0].table_name, "private.notification_email_deliveries");
+    const emailTrigger = await pool.query(`
+      select count(*)::int as count from pg_trigger
+      where tgname = 'portal_enqueue_notification_email' and not tgisinternal
+    `);
+    assert.equal(emailTrigger.rows[0].count, 1);
   } finally {
     await pool.end();
   }
