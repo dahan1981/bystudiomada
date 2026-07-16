@@ -175,7 +175,7 @@ test("manager completes the repaired operational flows", async ({ page, request 
   await page.getByRole("button", { name: "Notificações" }).click();
   await expect(page.getByRole("heading", { name: "Notificações" })).toBeVisible();
   await page.locator('[data-read-notification="notification-1"]').click();
-  await expect(page.getByText("0 não lida(s)")).toBeVisible();
+  await expect(page.getByText("Nenhuma notificação não lida")).toBeVisible();
 
   await goToRoute(page, "payments");
   await page.getByRole("button", { name: /Novo pagamento/ }).click();

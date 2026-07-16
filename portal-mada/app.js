@@ -193,7 +193,7 @@ const statusLabels = {
   paid: "Pago",
   active: "Ativo",
   planning: "Planejamento",
-  completed: "Concluido",
+  completed: "Concluído",
   not_started: "Não iniciado",
   awaiting_client: "Aguardando cliente",
   blocked: "Bloqueado",
@@ -202,14 +202,14 @@ const statusLabels = {
   locked: "Bloqueado",
   ready: "Pronto",
   in_progress: "Em andamento",
-  review: "Em revisao",
+  review: "Em revisão",
   awaiting_manager: "Aguardando gestor",
   skipped: "Pulado",
 };
 
 const crmStatusLabels = {
   lead_mapped: "Lead mapeado",
-  nurturing: "Nutricao",
+  nurturing: "Nutrição",
   lost: "Perdido",
   first_contact: "Primeiro contato",
   follow_up: "Em follow-up",
@@ -218,7 +218,7 @@ const crmStatusLabels = {
   proposal_sent_crm: "Proposta enviada",
   negotiating: "Em negociação",
   awaiting_contract_payment: "Aguardando contrato/pagamento",
-  sale_completed: "Venda concluida",
+  sale_completed: "Venda concluída",
 };
 
 const crmStatusClasses = {
@@ -238,7 +238,7 @@ const crmStatusClasses = {
 const MANAGEMENT_OWNER_ID = "management";
 
 const originChannels = [
-  "Direct Organico",
+  "Direct Orgânico",
   "Direct ativo",
   "Google",
   "Interação",
@@ -286,7 +286,7 @@ const nextActionOptions = [
   "Cobrar assinatura do contrato",
   "Confirmar pagamento",
   "Iniciar projeto",
-  "Retomar nutricao",
+  "Retomar nutrição",
   "Encerrar oportunidade",
 ];
 
@@ -314,7 +314,7 @@ const nextActionSuggestions = {
   negotiating: ["Preparar proposta", "Negociar condições", "Enviar condição para aprovação"],
   awaiting_contract_payment: ["Cobrar assinatura do contrato", "Confirmar pagamento"],
   sale_completed: ["Iniciar projeto"],
-  nurturing: ["Retomar nutricao", "Fazer follow-up"],
+  nurturing: ["Retomar nutrição", "Fazer follow-up"],
   lost: ["Encerrar oportunidade"],
 };
 
@@ -390,6 +390,12 @@ let supabaseSyncReady = false;
 let supabaseRetryTimer = null;
 let supabaseRetryDelay = 2000;
 let pendingSuccessToast = "";
+let opportunityFiltersOpen = false;
+
+function countLabel(count, singular, plural) {
+  const value = Number(count) || 0;
+  return `${value} ${value === 1 ? singular : plural}`;
+}
 
 function attachmentUrl(id) {
   return id ? `/api/portal-file?id=${encodeURIComponent(id)}` : "";
@@ -1087,6 +1093,49 @@ function recentActivityText(item) {
   return descriptions[item.action] || `Uma atualização${opportunityTarget} foi registrada`;
 }
 
+const auditActionLabels = {
+  opportunity_created: "Oportunidade criada",
+  opportunity_submitted: "Oportunidade enviada para aprovação",
+  opportunity_crm_updated: "Informações da oportunidade atualizadas",
+  crm_status_updated: "Etapa da oportunidade atualizada",
+  opportunity_progress_updated: "Andamento da oportunidade atualizado",
+  opportunity_archived: "Oportunidade arquivada",
+  opportunity_restored: "Oportunidade restaurada",
+  opportunity_rejected: "Oportunidade recusada e arquivada",
+  approved: "Condição comercial aprovada",
+  approved_with_changes: "Condição aprovada com alterações",
+  approval_needs_information: "Gestor solicitou informações",
+  contract_pipeline_created: "Contrato entrou em planejamento",
+  contract_planning_updated: "Planejamento do contrato atualizado",
+  customer_payment_created: "Pagamento registrado",
+  customer_payment_updated: "Registro de pagamento atualizado",
+  customer_payment_confirmed: "Pagamento confirmado",
+  commission_manually_updated: "Comissão atualizada",
+  commission_created_from_payment: "Comissão registrada",
+  commission_receipt_registered: "Comprovante de comissão anexado",
+  project_created_from_approval: "Projeto criado a partir da aprovação",
+  project_status_changed: "Status do projeto atualizado",
+  project_stage_status_changed: "Etapa do projeto atualizada",
+  manual_project_created: "Projeto criado manualmente",
+};
+
+function auditActionLabel(item) {
+  const metadata = item.metadata || {};
+  const base = auditActionLabels[item.action] || "Atividade atualizada";
+  if (item.action === "crm_status_updated" && metadata.previousStatus && metadata.crmStatus) {
+    return `Etapa: ${crmStatusLabels[metadata.previousStatus] || metadata.previousStatus} → ${crmStatusLabels[metadata.crmStatus] || metadata.crmStatus}`;
+  }
+  if (item.action === "project_status_changed" && metadata.previousStatus && metadata.status) {
+    return `Status: ${statusLabels[metadata.previousStatus] || metadata.previousStatus} → ${statusLabels[metadata.status] || metadata.status}`;
+  }
+  return base;
+}
+
+function shortId(value) {
+  const text = String(value || "");
+  return text.length > 16 ? `${text.slice(0, 8)}…${text.slice(-4)}` : text || "-";
+}
+
 function addNotification(text, { recipientUserId = null, recipientRole = null, title = "Atualização", kind = "info", entityType = null, entityId = null } = {}) {
   const roleRecipients = recipientRole
     ? state.users.filter((user) => user.role === recipientRole && user.active !== false && user.id !== currentUser?.id).map((user) => user.id)
@@ -1294,11 +1343,11 @@ function projectForOpportunity(opportunityId) {
 }
 
 function statusBadge(status) {
-  return `<span class="status ${statusClasses[status] || "info"}">${statusLabels[status] || status}</span>`;
+  return `<span class="status status-condition ${statusClasses[status] || "info"}">${statusLabels[status] || status}</span>`;
 }
 
 function crmStatusBadge(status) {
-  return `<span class="status ${crmStatusClasses[status] || "info"}">${crmStatusLabels[status] || status || "-"}</span>`;
+  return `<span class="status status-crm ${crmStatusClasses[status] || "info"}">${crmStatusLabels[status] || status || "-"}</span>`;
 }
 
 function canRequestConditionApproval(opp) {
@@ -1437,7 +1486,7 @@ function render() {
         </button>
         <div class="topbar-actions">
           <span class="topbar-sync ${supabaseSyncReady ? "is-online" : ""}" title="${esc(supabaseSyncStatus)}"><i></i><span>${supabaseSyncStatus === "Salvando alterações" ? "Salvando" : "Dados salvos"}</span></span>
-          <button class="button topbar-create" type="button" data-new-opportunity aria-label="Nova oportunidade">${renderIcon("plus")}<span>Nova oportunidade</span></button>
+          ${["dashboard", "opportunities", "progress"].includes(currentRoute) ? `<button class="button topbar-create" type="button" data-new-opportunity aria-label="Nova oportunidade">${renderIcon("plus")}<span>Nova oportunidade</span></button>` : ""}
           <button class="notification icon-button" type="button" data-route="notifications" aria-label="Notificações">
             ${renderIcon("bell")}
             <span>${visibleNotifications().filter((item) => !item.read).length}</span>
@@ -1760,9 +1809,12 @@ function renderDashboard() {
           <div><h3>Pipeline comercial</h3><p>Visão rápida da jornada até a venda concluída.</p></div>
           <button class="button ghost compact-button" type="button" data-route="progress">Ver andamento ${renderIcon("arrow-right")}</button>
         </div>
-        <div class="pipeline-strip">
+        <div class="pipeline-strip" aria-label="Etapas do pipeline comercial">
           ${pipeline.map(([label, value], index) => `
-            <div class="pipeline-step"><span>${index + 1}</span><div><strong>${value}</strong><small>${label}</small></div></div>
+            <div class="pipeline-step ${value ? "has-items" : "is-empty"}">
+              <span>${index + 1}</span><div><strong>${value}</strong><small>${label}</small></div>
+              <i class="pipeline-progress" aria-hidden="true"></i>
+            </div>
           `).join("")}
         </div>
       </section>
@@ -1810,7 +1862,7 @@ function renderOpportunityList(items) {
 function renderApprovals() {
   const pending = state.opportunities.filter((item) => item.status === "pending_approval");
   return `
-    ${pageHead("Fila de Aprovações", `${pending.length} solicitacao(oes) pendente(s)`)}
+    ${pageHead("Fila de Aprovações", pending.length ? countLabel(pending.length, "solicitação pendente", "solicitações pendentes") : "Nenhuma solicitação pendente")}
     ${pending.length ? opportunityTable(pending, true) : `<section class="card">${empty("Nenhuma aprovação pendente", "◷")}</section>`}
   `;
 }
@@ -1911,16 +1963,19 @@ function renderOpportunities() {
         <option value="">Todos os status do CRM</option>
         ${Object.entries(crmStatusLabels).map(([key, label]) => `<option value="${key}">${label}</option>`).join("")}
       </select>
-      <select data-sdr-filter aria-label="Filtrar SDR">
-        <option value="">Todas as SDRs</option>
-        ${sdrUsers().map((user) => `<option value="${esc(user.id)}">${esc(user.name)}</option>`).join("")}
-      </select>
-      ${renderDateControl({ placeholder: "Data inicial", ariaLabel: "Data inicial", compact: true, inputAttributes: "data-date-from-filter" })}
-      ${renderDateControl({ placeholder: "Data final", ariaLabel: "Data final", compact: true, inputAttributes: "data-date-to-filter" })}
-      <input class="search" data-money-input data-amount-min-filter inputmode="decimal" placeholder="Valor mínimo" />
-      <input class="search" data-money-input data-amount-max-filter inputmode="decimal" placeholder="Valor máximo" />
+      <button class="button secondary filter-toggle" type="button" data-toggle-opportunity-filters aria-expanded="${opportunityFiltersOpen}">${renderIcon("sliders-horizontal")} Filtros${opportunityFiltersOpen ? "" : " (mais)"}</button>
+      ${opportunityFiltersOpen ? `<div class="opportunity-more-filters" data-opportunity-more-filters>
+        <select data-sdr-filter aria-label="Filtrar SDR">
+          <option value="">Todas as SDRs</option>
+          ${sdrUsers().map((user) => `<option value="${esc(user.id)}">${esc(user.name)}</option>`).join("")}
+        </select>
+        ${renderDateControl({ placeholder: "Data inicial", ariaLabel: "Data inicial", compact: true, inputAttributes: "data-date-from-filter" })}
+        ${renderDateControl({ placeholder: "Data final", ariaLabel: "Data final", compact: true, inputAttributes: "data-date-to-filter" })}
+        <input class="search" data-money-input data-amount-min-filter inputmode="decimal" placeholder="Valor mínimo" />
+        <input class="search" data-money-input data-amount-max-filter inputmode="decimal" placeholder="Valor máximo" />
+      </div>` : ""}
     </div>
-    <div class="table-meta"><span><strong>${items.length}</strong> oportunidade(s)</span><span>${renderIcon("sliders-horizontal")} Filtros combinados</span></div>
+    <div class="table-meta"><span><strong>${countLabel(items.length, "oportunidade", "oportunidades")}</strong></span><span>${renderIcon("sliders-horizontal")} Busca e status visíveis; filtros avançados sob demanda</span></div>
     <div data-opportunity-table>${opportunityTable(items)}</div>
   `;
 }
@@ -1967,7 +2022,7 @@ function renderNotifications() {
   return `
     ${pageHead(
       "Notificações",
-      `${unread} não lida(s) de ${items.length} notificação(ões)`,
+      `${unread ? countLabel(unread, "notificação não lida", "notificações não lidas") : "Nenhuma notificação não lida"} de ${countLabel(items.length, "notificação", "notificações")}`,
       unread ? `<button class="button secondary" type="button" data-mark-notifications>${renderIcon("check-check")} Marcar todas como lidas</button>` : ""
     )}
     ${items.length ? `
@@ -2198,7 +2253,7 @@ function renderOpportunityProgress() {
               <th>SDR</th>
               <th>Etapa</th>
               <th>Próxima ação</th>
-              <th>Data</th>
+              <th>Prazo da próxima ação</th>
               <th>Observações</th>
               <th></th>
             </tr>
@@ -2213,8 +2268,8 @@ function renderOpportunityProgress() {
                 <td class="progress-owner" data-label="SDR">${esc(getActorName(item.sdrId))}</td>
                 <td class="progress-stage-cell" data-label="Etapa">${renderProgressStagePicker(item)}</td>
                 <td class="progress-action-cell" data-label="Próxima ação">${renderProgressActionPicker(item)}</td>
-                <td class="progress-date-cell" data-label="Data">${renderProgressDatePicker(item)}</td>
-                <td class="progress-notes-cell" data-label="Observações"><input data-progress-notes value="${esc(item.notes || "")}" placeholder="Adicionar observação" /></td>
+                <td class="progress-date-cell" data-label="Prazo da próxima ação">${renderProgressDatePicker(item)}</td>
+                <td class="progress-notes-cell" data-label="Observações"><input data-progress-notes value="${esc(item.notes || "")}" title="${esc(item.notes || "Sem observação registrada")}" placeholder="Adicionar observação" /></td>
                 <td class="progress-row-actions" data-label="Ações">
                   ${renderProgressConditionAction(item)}
                   <button class="button compact-button progress-save" type="button" data-save-opportunity-progress="${item.id}" hidden>Salvar</button>
@@ -2244,7 +2299,7 @@ function opportunityTable(items, approvalMode = false) {
             <th>Status CRM</th>
             <th>Condição</th>
             <th>Próxima ação</th>
-            <th>Data</th>
+            <th>Criada em</th>
             <th></th>
           </tr>
         </thead>
@@ -2507,7 +2562,7 @@ function renderCommissions() {
   const firstSummary = firstContract ? contractPaymentSummary(firstContract.id) : null;
 
   return `
-    ${pageHead("Comissões", "Lancamento manual de comissões pelo gestor")}
+    ${pageHead("Comissões", "Lançamento manual de comissões pelo gestor")}
     <section class="card">
       <div class="section-head">
         <div>
@@ -2616,7 +2671,7 @@ function renderMyCommissions() {
   const availableCount = summary.commissions.filter((item) => item.status === "available").length;
   const remainingToBatch = availableCount ? 5 - summary.cycleCount : 5;
   return `
-    ${pageHead("Minhas Comissões", "Sua comissão, ciclo de pagamento e historico recebido")}
+    ${pageHead("Minhas Comissões", "Sua comissão, ciclo de pagamento e histórico recebido")}
     <div class="grid cards-4">
       ${metricCard("Comissão Disponível", brl(summary.availableCents), "$")}
       ${metricCard("Ciclo de Pagamento", `${summary.cycleCount} de 5`, "", (summary.cycleCount / 5) * 100)}
@@ -2632,7 +2687,7 @@ function renderMyCommissions() {
         </div>
       </div>
       <div class="kpi-list">
-        <div class="kpi-row"><span>Comissões disponiveis no ciclo</span><strong>${availableCount}</strong></div>
+        <div class="kpi-row"><span>Comissões disponíveis no ciclo</span><strong>${availableCount}</strong></div>
         <div class="kpi-row"><span>Faltam para fechar o próximo lote</span><strong>${remainingToBatch} venda(s)</strong></div>
         <div class="kpi-row"><span>Comissão total gerada</span><strong>${brl(summary.totalCommissionCents)}</strong></div>
         <div class="kpi-row"><span>Vendas validadas</span><strong>${summary.validatedSales}</strong></div>
@@ -3101,19 +3156,19 @@ function renderReportsFinance() {
 
 function renderAudit() {
   return `
-    ${pageHead("Auditoria", "Registro append-only das acoes do sistema")}
+    ${pageHead("Auditoria", "Histórico das movimentações importantes do portal")}
     ${state.auditLogs.length ? `
       <div class="table-wrap">
         <table>
-          <thead><tr><th>Data</th><th>Usuário</th><th>Ação</th><th>Entidade</th><th>ID</th></tr></thead>
+          <thead><tr><th>Quando</th><th>Quem</th><th>O que aconteceu</th><th>Registro</th><th>ID</th></tr></thead>
           <tbody>
             ${state.auditLogs.map((item) => `
               <tr>
                 <td>${dateLabel(item.createdAt)}</td>
                 <td>${esc(getActorName(item.actorUserId))}</td>
-                <td><strong>${esc(item.action)}</strong></td>
-                <td>${esc(item.entityType)}</td>
-                <td>${esc(item.entityId)}</td>
+                <td><strong>${esc(auditActionLabel(item))}</strong></td>
+                <td>${esc(item.entityType || "Registro")}</td>
+                <td><button class="copy-id" type="button" data-copy-id="${esc(item.entityId)}" title="Copiar ID completo">${esc(shortId(item.entityId))}</button></td>
               </tr>
             `).join("")}
           </tbody>
@@ -3136,7 +3191,7 @@ function renderSettings() {
     <div class="settings-layout">
       ${currentUser.role === "admin_manager" ? `
       <section class="card team-card">
-        <div class="section-head"><div><h3>Equipe e acessos</h3><p>Crie uma conta individual para cada SDR.</p></div><span class="settings-count">${state.users.length} conta(s)</span></div>
+        <div class="section-head"><div><h3>Equipe e acessos</h3><p>Crie uma conta individual para cada SDR.</p></div><span class="settings-count">${countLabel(state.users.length, "conta", "contas")}</span></div>
         <div class="team-list">
           ${state.users.map((user) => `
             <article class="team-row ${user.active === false ? "is-inactive" : ""}">
@@ -4074,7 +4129,7 @@ function renderPaymentRecordDrawer(contractId, paymentId = null) {
         </label>
         <label class="field full"><span>Cliente ou origem do pagamento *</span><input name="externalClientName" required value="${esc(payment?.externalClientName || opp?.clientName || "")}" placeholder="Ex. Cliente avulso, evento ou nome da empresa" /></label>
         <label class="field"><span>Valor registrado</span><input name="amount" data-money-input inputmode="decimal" required value="${moneyInputValue(suggested)}" /></label>
-        <label class="field"><span>Status do registro</span><select name="status"><option value="confirmed" ${!payment || payment.status === "confirmed" ? "selected" : ""}>Confirmado / conferido</option><option value="pending" ${payment?.status === "pending" ? "selected" : ""}>Aguardando conferencia</option></select></label>
+        <label class="field"><span>Status do registro</span><select name="status"><option value="confirmed" ${!payment || payment.status === "confirmed" ? "selected" : ""}>Confirmado / conferido</option><option value="pending" ${payment?.status === "pending" ? "selected" : ""}>Aguardando conferência</option></select></label>
         <label class="field"><span>Tipo</span><select name="type">${[["external", "Pagamento externo"], ["contract_payment", "Pagamento do contrato"], ["initial", "Entrada"], ["installment", "Parcela"], ["remaining", "Saldo restante"], ["adjustment", "Ajuste"]].map(([value, label]) => `<option value="${value}" ${(!payment && value === (contract ? "contract_payment" : "external")) || payment?.type === value ? "selected" : ""}>${label}</option>`).join("")}</select></label>
         <label class="field"><span>Método externo</span><select name="method">${["Pix", "Transferencia", "Boleto", "Cartao externo", "Dinheiro", "Outro"].map((method) => `<option value="${method}" ${payment?.method === method ? "selected" : ""}>${method}</option>`).join("")}</select></label>
         ${renderDateField("Data do pagamento", "paidAt", String(payment?.paidAt || nowIso()).slice(0, 10))}
@@ -5181,6 +5236,14 @@ function bindActions() {
   action("[data-save-commission]", (button) => updateCommission(button.dataset.saveCommission, button.closest("[data-commission-row]")));
   action("[data-pay-batch]", (button) => payBatch(button.dataset.payBatch));
   action("[data-export-csv]", (button) => exportCsv(button.dataset.exportCsv));
+  document.querySelectorAll("[data-copy-id]").forEach((button) => button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(button.dataset.copyId || "");
+      toast("ID copiado.");
+    } catch {
+      toast("Não foi possível copiar o ID.");
+    }
+  }));
   action("[data-mark-notifications]", () => markAllNotificationsRead());
   action("[data-toggle-user-active]", (button) => togglePortalUser(button.dataset.toggleUserActive, button.dataset.active === "true"));
 }
@@ -5268,6 +5331,10 @@ async function changeCurrentPassword(form) {
 }
 
 function bindFilters() {
+  document.querySelector("[data-toggle-opportunity-filters]")?.addEventListener("click", () => {
+    opportunityFiltersOpen = !opportunityFiltersOpen;
+    render();
+  });
   const search = document.querySelector("[data-search]");
   const filter = document.querySelector("[data-status-filter]");
   const sdrFilter = document.querySelector("[data-sdr-filter]");
