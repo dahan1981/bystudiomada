@@ -6,7 +6,7 @@ test("builds a personalized SDR invitation with a portal action link", () => {
   const email = buildSdrInvitationEmail({
     recipientName: "João Dahan",
     recipientEmail: "joao@example.com",
-    actionLink: "https://bystudiomada.vercel.app/portal-mada/#access_token=test&refresh_token=test&type=invite",
+    actionLink: "https://www.bystudiomada.com.br/portal-mada/#access_token=test&refresh_token=test&type=invite",
   });
 
   assert.equal(email.subject, "Seu acesso ao Portal Comercial Mada");
@@ -34,7 +34,7 @@ test("builds a branded and safe Portal Mada notification email", () => {
   assert.match(email.html, /Nina &lt;Gestora&gt;/);
   assert.match(email.html, /Cliente &amp; Marca/);
   assert.doesNotMatch(email.html, /Nina <Gestora>/);
-  assert.match(email.text, /https:\/\/bystudiomada\.vercel\.app\/portal-mada\//);
+  assert.match(email.text, /https:\/\/www\.bystudiomada\.com\.br\/portal-mada\//);
   assert.match(email.text, /Mada Operação/);
 });
 

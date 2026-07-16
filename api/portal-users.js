@@ -9,6 +9,7 @@ function bodyOf(request) {
 }
 
 function portalOrigin(request) {
+  if (process.env.PORTAL_PUBLIC_ORIGIN) return process.env.PORTAL_PUBLIC_ORIGIN.replace(/\/$/, "");
   const host = request.headers?.["x-forwarded-host"] || request.headers?.host;
   const protocol = request.headers?.["x-forwarded-proto"] || (process.env.VERCEL ? "https" : "http");
   return `${protocol}://${host}`;

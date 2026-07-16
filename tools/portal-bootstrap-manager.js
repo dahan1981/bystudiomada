@@ -88,7 +88,7 @@ async function main() {
   }
 
   const accounts = managerAccounts(config);
-  const redirectTo = String(config.redirectUrl || process.env.PORTAL_REDIRECT_URL || "https://bystudiomada.vercel.app/portal-mada/");
+  const redirectTo = String(config.redirectUrl || process.env.PORTAL_REDIRECT_URL || "https://www.bystudiomada.com.br/portal-mada/");
   const admin = createAdminClient();
   const managers = await upsertAuthManagers(admin, accounts, redirectTo);
 
