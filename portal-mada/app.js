@@ -1218,7 +1218,29 @@ function normalizeContract(contract, opp, condition) {
   contract.proposalAcceptedAt = contract.proposalAcceptedAt || null;
   contract.contractLink = contract.contractLink || "";
   contract.contractLinkAddedAt = contract.contractLinkAddedAt || null;
+  contract.recordMode = contract.recordMode || (contract.opportunityId ? "crm" : "external");
+  contract.externalClientName = contract.externalClientName || "";
+  contract.externalBrandName = contract.externalBrandName || "";
+  contract.sdrId = contract.sdrId || opp?.sdrId || null;
+  contract.externalSource = contract.externalSource || (contract.recordMode === "external" ? "outside_crm" : "crm");
+  contract.notes = contract.notes || "";
+  contract.contractAttachmentId = contract.contractAttachmentId || "";
+  contract.contractFileName = contract.contractFileName || "";
   if (contract.status === "draft_contract") contract.status = contract.proposalFileName ? "proposal_ready" : "proposal_planning";
+}
+
+function isExternalContract(contract) {
+  return Boolean(contract && (contract.recordMode === "external" || (!contract.opportunityId && contract.externalClientName)));
+}
+
+function contractClientName(contract) {
+  const opportunity = contract && byId(state.opportunities, contract.opportunityId);
+  return contract?.externalClientName || opportunity?.clientName || "Contrato externo";
+}
+
+function contractSdrId(contract) {
+  const opportunity = contract && byId(state.opportunities, contract.opportunityId);
+  return contract?.sdrId || opportunity?.sdrId || null;
 }
 
 function visibleOpportunities() {
@@ -1261,7 +1283,9 @@ function latestContract(opportunityId) {
 
 function visibleContracts() {
   const visibleIds = new Set(visibleOpportunities().map((opp) => opp.id));
-  return state.contracts.filter((contract) => visibleIds.has(contract.opportunityId));
+  return state.contracts.filter((contract) => isExternalContract(contract)
+    ? currentUser?.role === "admin_manager" || contractSdrId(contract) === currentUser?.id
+    : visibleIds.has(contract.opportunityId));
 }
 
 function visiblePayments() {
@@ -2339,7 +2363,7 @@ function opportunityTable(items, approvalMode = false) {
 }
 
 function renderContracts() {
-  const rows = state.contracts.filter((contract) => visibleOpportunities().some((opp) => opp.id === contract.opportunityId));
+  const rows = visibleContracts();
   return `
     ${pageHead("Contratos", "Formalizacao criada somente a partir de condição aprovada")}
     ${rows.length ? `
@@ -2371,7 +2395,7 @@ function renderContracts() {
 }
 
 function renderContractsPipeline() {
-  const rows = state.contracts.filter((contract) => visibleOpportunities().some((opp) => opp.id === contract.opportunityId));
+  const rows = visibleContracts();
   const availableRows = rows.filter((item) => ["proposal_ready", "proposal_sent", "proposal_accepted", "contract_ready"].includes(item.status)).length;
   return `
     ${pageHead(
@@ -2396,8 +2420,8 @@ function renderContractsPipeline() {
               return `
                 <tr>
                   <td><strong>${esc(item.contractNumber)}</strong></td>
-                  <td>${esc(opp?.clientName || "-")}</td>
-                  <td>${esc(getActorName(opp?.sdrId))}</td>
+                  <td>${esc(contractClientName(item))}</td>
+                  <td>${esc(getActorName(contractSdrId(item)))}</td>
                   <td>${brl(item.amountCents)}</td>
                   <td>${esc(paymentPlanLabel(item.paymentPlan))}</td>
                   <td>${item.proposalFileName ? attachmentLink(item.proposalAttachmentId, item.proposalFileName) : "-"}</td>
@@ -2453,7 +2477,7 @@ function renderPayments() {
               return `
                 <tr>
                   <td><strong>${esc(contract.contractNumber)}</strong></td>
-                  <td>${esc(opp?.clientName || "-")}</td>
+                  <td>${esc(contractClientName(contract))}</td>
                   <td>${brl(contract.amountCents)}</td>
                   <td>${brl(summary.confirmedCents)}</td>
                   <td>${brl(summary.pendingCents)}</td>
@@ -2596,7 +2620,7 @@ function renderCommissions() {
           <label class="field">
             <span>SDR responsavel</span>
             <select name="sdrId" data-commission-sdr-select required>
-              ${sdrUsers().map((user) => `<option value="${esc(user.id)}" ${user.id === firstOpportunity?.sdrId ? "selected" : ""}>${esc(user.name)}</option>`).join("")}
+              ${sdrUsers().map((user) => `<option value="${esc(user.id)}" ${user.id === (firstOpportunity?.sdrId || contractSdrId(firstContract)) ? "selected" : ""}>${esc(user.name)}</option>`).join("")}
             </select>
           </label>
           <label class="field">
@@ -2869,6 +2893,7 @@ function renderProjectsManagement() {
 
 function renderFiles() {
   const files = visibleFiles();
+  const externalContracts = visibleContracts().filter(isExternalContract);
   const sdrOptions = sdrUsers();
   const availableBatches = state.payoutBatches.filter((batch) =>
     currentUser.role === "admin_manager" && batch.status === "paid"
@@ -2882,6 +2907,28 @@ function renderFiles() {
     </div>
     ${currentUser.role === "admin_manager" ? `
       <section class="card" style="margin-top:18px">
+        <section class="card" style="margin-bottom:18px">
+          <div class="section-head"><div><h3>Contrato de fora do CRM</h3><p>Cadastre contratos fechados por outro canal para conectar pagamentos, comissao e relatorios.</p></div><span class="status-pill info">Registro manual</span></div>
+          ${externalContracts.length ? externalContractTable(externalContracts) : ""}
+          <form class="form-grid" data-external-contract-form>
+            <div class="form-grid two">
+              <label class="field"><span>Cliente / empresa *</span><input name="externalClientName" required placeholder="Ex. Empresa Cliente" /></label>
+              <label class="field"><span>Marca / projeto</span><input name="externalBrandName" placeholder="Ex. Marca ou unidade" /></label>
+            </div>
+            <div class="form-grid three">
+              <label class="field"><span>Valor contratado *</span><input name="amount" data-money-input inputmode="decimal" required placeholder="Ex. 10.000,00" /></label>
+              <label class="field"><span>Forma de pagamento *</span><select name="paymentPlan"><option value="50_50">50% / 50%</option><option value="100">A vista</option></select></label>
+              <label class="field"><span>SDR responsavel</span><select name="sdrId"><option value="">Sem SDR vinculada</option>${sdrOptions.map((user) => `<option value="${user.id}">${esc(user.name)}</option>`).join("")}</select></label>
+            </div>
+            <div class="form-grid two">
+              <label class="field"><span>Numero do contrato</span><input name="contractNumber" placeholder="Automatico se vazio" /></label>
+              <label class="field"><span>Link do contrato</span><input name="contractLink" type="url" placeholder="https://..." /></label>
+            </div>
+            <label class="field full"><span>Arquivo do contrato</span><input name="contractFile" type="file" accept="application/pdf,image/jpeg,image/png" /><small>PDF, JPG ou PNG de ate 10 MB. O upload e privado.</small></label>
+            <label class="field full"><span>Observacoes</span><textarea name="notes" placeholder="Como o contrato foi fechado, escopo, referencia ou observacoes financeiras."></textarea></label>
+            <div class="actions full"><button class="button" type="submit">Cadastrar contrato externo</button></div>
+          </form>
+        </section>
         <form class="form-grid" data-file-form>
           <label class="field">
             <span>Lote de comissão pago</span>
@@ -2910,6 +2957,15 @@ function renderFiles() {
     ` : ""}
     <div style="margin-top:18px">${files.length ? fileTable(files) : `<section class="card">${empty("Nenhum comprovante de comissão registrado", "▧")}</section>`}</div>
   `;
+}
+
+function externalContractTable(contracts) {
+  return `<div class="table-wrap" style="margin-bottom:18px"><table><thead><tr><th>Contrato</th><th>Cliente</th><th>SDR</th><th>Valor</th><th>Pagamento</th><th>Documento</th><th>Pagamentos</th><th></th></tr></thead><tbody>
+    ${contracts.map((contract) => {
+      const summary = contractPaymentSummary(contract.id);
+      return `<tr><td><strong>${esc(contract.contractNumber)}</strong><br><small>Fora do CRM</small></td><td>${esc(contractClientName(contract))}${contract.externalBrandName ? `<br><small>${esc(contract.externalBrandName)}</small>` : ""}</td><td>${esc(getActorName(contractSdrId(contract)))}</td><td>${brl(contract.amountCents)}</td><td>${esc(paymentPlanLabel(contract.paymentPlan))}</td><td>${contract.contractAttachmentId ? attachmentLink(contract.contractAttachmentId, contract.contractFileName || "Abrir contrato") : contract.contractLink ? `<a href="${esc(contract.contractLink)}" target="_blank" rel="noreferrer">Abrir link</a>` : "-"}</td><td>${brl(summary.confirmedCents)} / ${brl(contract.amountCents)}</td><td class="row-actions"><button class="button secondary" data-open-contract="${contract.id}">Abrir</button><button class="button" data-register-contract-payment="${contract.id}">Registrar pagamento</button></td></tr>`;
+    }).join("")}
+  </tbody></table></div>`;
 }
 
 function visibleFiles() {
@@ -3954,7 +4010,7 @@ function renderContractCard(contract, payment) {
 function renderCommercialContractCard(contract, payment) {
   const opp = byId(state.opportunities, contract.opportunityId);
   const canManage = currentUser.role === "admin_manager";
-  const canSdrAct = currentUser.role === "sdr" && opp?.sdrId === currentUser.id;
+  const canSdrAct = currentUser.role === "sdr" && contractSdrId(contract) === currentUser.id;
   return `
     <section class="card">
       <p class="section-title">Proposta, contrato e pagamento</p>
@@ -4018,7 +4074,7 @@ function renderContractDrawer(id) {
   const summary = contractPaymentSummary(contract.id);
   const balance = Math.max(0, contract.amountCents - summary.confirmedCents);
   const canManage = currentUser.role === "admin_manager";
-  const canSdrAct = currentUser.role === "sdr" && opp?.sdrId === currentUser.id;
+  const canSdrAct = currentUser.role === "sdr" && contractSdrId(contract) === currentUser.id;
   const main = `
     ${renderCommercialContractCard(contract, payment)}
     <section class="card">
@@ -4045,15 +4101,15 @@ function renderContractDrawer(id) {
         ${canManage && contract.status === "signed" && payment?.status === "confirmed" && !contract.saleValidatedAt ? `<button class="button success" data-validate-sale="${contract.id}">Validar venda</button>` : ""}
         ${canSdrAct && contract.proposalFileName && !contract.proposalSentAt ? `<button class="button" data-send-proposal="${contract.id}">Enviar proposta para cliente</button>` : ""}
         ${canSdrAct && contract.contractLink && contract.status === "contract_ready" ? `<button class="button" data-send-contract="${contract.id}">Enviar contrato para cliente</button>` : ""}
-        <button class="button secondary" data-open-opportunity="${contract.opportunityId}">Abrir CRM da oportunidade</button>
+        ${contract.opportunityId ? `<button class="button secondary" data-open-opportunity="${contract.opportunityId}">Abrir CRM da oportunidade</button>` : ""}
       </div>
     </section>
     <section class="card">
       <p class="section-title">Contexto</p>
       <div class="detail-list">
-        <div class="detail-row"><span>Cliente</span><strong>${esc(opp?.clientName || "-")}</strong></div>
+        <div class="detail-row"><span>Cliente</span><strong>${esc(contractClientName(contract))}</strong></div>
         <div class="detail-row"><span>Marca</span><strong>${esc(opp?.brandName || "-")}</strong></div>
-        <div class="detail-row"><span>SDR</span><strong>${esc(getActorName(opp?.sdrId))}</strong></div>
+        <div class="detail-row"><span>SDR</span><strong>${esc(getActorName(contractSdrId(contract)))}</strong></div>
         <div class="detail-row"><span>Serviços</span><div>${esc(serviceNamesForOpportunity(opp))}</div></div>
         <div class="detail-row"><span>Contrato</span><strong>${esc(contract.contractNumber)}</strong></div>
         <div class="detail-row"><span>Status</span>${statusBadge(contract.status)}</div>
@@ -4070,7 +4126,7 @@ function renderContractDrawer(id) {
     </section>
   `;
   return renderWorkspaceShell({
-    title: `${contract.contractNumber} - ${opp?.clientName || "Contrato"}`,
+    title: `${contract.contractNumber} - ${contractClientName(contract)}`,
     subtitle: `${esc(paymentPlanLabel(contract.paymentPlan))} - ${brl(contract.amountCents)}`,
     badges: statusBadge(contract.status),
     label: "Workspace do contrato",
@@ -4087,8 +4143,7 @@ function renderPaymentRecordDrawer(contractId, paymentId = null) {
   const summary = contract ? contractPaymentSummary(contract.id) : { confirmedCents: 0, pendingCents: 0 };
   const suggested = payment?.amountCents || (contract ? Math.max(0, contract.amountCents - summary.confirmedCents) || contract.amountCents : 0);
   const contractOptions = visibleContracts().map((item) => {
-    const opportunity = byId(state.opportunities, item.opportunityId);
-    return `<option value="${item.id}" ${item.id === contract?.id ? "selected" : ""}>${esc(item.contractNumber)} - ${esc(opportunity?.clientName || "Cliente")}</option>`;
+    return `<option value="${item.id}" ${item.id === contract?.id ? "selected" : ""}>${esc(item.contractNumber)} - ${esc(contractClientName(item))}</option>`;
   }).join("");
   const side = `
     ${contract ? `
@@ -4096,8 +4151,8 @@ function renderPaymentRecordDrawer(contractId, paymentId = null) {
         <p class="section-title">Contexto do contrato</p>
         <div class="detail-list">
           <div class="detail-row"><span>Contrato</span><strong>${esc(contract.contractNumber)}</strong></div>
-          <div class="detail-row"><span>Cliente</span><strong>${esc(opp?.clientName || "-")}</strong></div>
-          <div class="detail-row"><span>SDR</span><strong>${esc(getActorName(opp?.sdrId))}</strong></div>
+          <div class="detail-row"><span>Cliente</span><strong>${esc(contractClientName(contract))}</strong></div>
+          <div class="detail-row"><span>SDR</span><strong>${esc(getActorName(contractSdrId(contract)))}</strong></div>
           <div class="detail-row"><span>Forma</span><strong>${esc(paymentPlanLabel(contract.paymentPlan))}</strong></div>
           <div class="detail-row"><span>Valor contrato</span><strong>${brl(contract.amountCents)}</strong></div>
           <div class="detail-row"><span>Recebido</span><strong>${brl(summary.confirmedCents)}</strong></div>
@@ -4853,6 +4908,11 @@ function bindForms() {
   document.querySelector("[data-opportunity-follow-form]")?.addEventListener("submit", (event) => {
     event.preventDefault();
     submitOpportunityFollowAction(event.currentTarget.dataset.opportunityFollowForm, event.currentTarget);
+  });
+
+  document.querySelector("[data-external-contract-form]")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await registerExternalContract(new FormData(event.currentTarget));
   });
 
   document.querySelector("[data-file-form]")?.addEventListener("submit", async (event) => {
@@ -5996,6 +6056,69 @@ function ensureCommercialContract(opp, condition) {
   return contract;
 }
 
+async function registerExternalContract(form) {
+  if (currentUser.role !== "admin_manager") return toast("Apenas o gestor pode cadastrar contratos externos.");
+  const externalClientName = String(form.get("externalClientName") || "").trim();
+  const amountCents = cents(form.get("amount"));
+  const contractLink = String(form.get("contractLink") || "").trim();
+  if (!externalClientName) return toast("Informe o cliente ou empresa do contrato.");
+  if (amountCents <= 0) return toast("Informe um valor contratado maior que zero.");
+  if (contractLink) {
+    try {
+      const url = new URL(contractLink);
+      if (!["http:", "https:"].includes(url.protocol)) throw new Error("invalid protocol");
+    } catch {
+      return toast("Informe um link de contrato valido, comecando com https://.");
+    }
+  }
+  const contractId = uid("ctr_external");
+  const contractFile = form.get("contractFile");
+  let contractAttachmentId = "";
+  if (contractFile?.name) {
+    try {
+      const attachment = await uploadPortalAttachment(contractFile, { kind: "external_contract", contractId });
+      contractAttachmentId = attachment?.id || "";
+    } catch {
+      return toast("Nao foi possivel enviar o contrato. Tente novamente.");
+    }
+  }
+  const sdrId = String(form.get("sdrId") || "") || null;
+  const contract = {
+    id: contractId,
+    opportunityId: null,
+    clientId: null,
+    recordMode: "external",
+    externalSource: "outside_crm",
+    externalClientName,
+    externalBrandName: String(form.get("externalBrandName") || "").trim(),
+    sdrId,
+    contractNumber: String(form.get("contractNumber") || "").trim() || `EXT-${String(state.contracts.filter(isExternalContract).length + 1).padStart(4, "0")}`,
+    amountCents,
+    proposalAmountCents: amountCents,
+    paymentPlan: form.get("paymentPlan") || "50_50",
+    paymentTerms: paymentPlanLabel(form.get("paymentPlan") || "50_50"),
+    contractLink,
+    contractLinkAddedAt: contractLink ? nowIso() : null,
+    contractAttachmentId,
+    contractFileName: contractFile?.name || "",
+    proposalFileName: "",
+    proposalAttachmentId: "",
+    status: "signed",
+    signedAt: nowIso(),
+    saleValidatedAt: null,
+    notes: String(form.get("notes") || "").trim(),
+    createdBy: currentUser.id,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+  };
+  state.contracts.unshift(contract);
+  addAudit("external_contract_created", "Contract", contract.id, { sdrId, amountCents, recordOnly: true });
+  if (sdrId) addNotification(`Um contrato externo de ${externalClientName} foi cadastrado e vinculado a voce.`, { recipientUserId: sdrId, title: "Novo contrato externo", kind: "contract", entityType: "contract", entityId: contract.id });
+  await saveState();
+  toast("Contrato externo cadastrado. Agora voce pode vincular pagamentos a ele.");
+  render();
+}
+
 async function saveContractPlanning(id, formEl) {
   const contract = byId(state.contracts, id);
   if (!contract || currentUser.role !== "admin_manager") return toast("Apenas o gestor pode editar o planejamento comercial.");
@@ -6053,7 +6176,7 @@ async function saveContractPlanning(id, formEl) {
 
 function sendProposal(id) {
   const contract = byId(state.contracts, id);
-  const opp = contract && byId(state.opportunities, contract.opportunityId);
+  const opp = contract && (byId(state.opportunities, contract.opportunityId) || { clientName: contractClientName(contract), timeline: null });
   if (!contract || !opp) return toast("Contrato inexistente.");
   if (currentUser.role !== "sdr" || opp.sdrId !== currentUser.id) return toast("Apenas a SDR vinculada pode enviar esta proposta.");
   if (!contract.proposalFileName) return toast("A proposta ainda não foi anexada pelo gestor.");
@@ -6240,11 +6363,11 @@ function createCommissionFromPayment(form) {
   if (currentUser.role !== "admin_manager") return toast("Apenas o gestor pode registrar comissões.");
   const payment = byId(state.payments, form.get("paymentId"));
   const contract = payment && byId(state.contracts, payment.contractId);
-  const opp = contract && byId(state.opportunities, contract.opportunityId);
-  if (!payment || !contract || !opp) return toast("Pagamento ou contrato não encontrado.");
+  const opp = contract && (byId(state.opportunities, contract.opportunityId) || { clientName: contractClientName(contract), timeline: null });
+  if (!payment || !contract) return toast("Pagamento ou contrato nao encontrado.");
   if (payment.status !== "confirmed") return toast("A comissão so pode ser gerada para pagamentos confirmados.");
   if (commissionForPayment(payment.id)) return toast("Este pagamento ja gerou uma comissão.");
-  const sdrId = form.get("sdrId") || opp.sdrId;
+  const sdrId = form.get("sdrId") || contractSdrId(contract);
   const rateBps = Number(form.get("rateBps"));
   if (!sdrId || ![500, 1000].includes(rateBps)) return toast("Informe a SDR e selecione 5% ou 10%.");
   const baseCents = cents(form.get("baseAmount"));
@@ -6268,7 +6391,7 @@ function createCommissionFromPayment(form) {
     manualEntry: true,
   };
   state.commissions.unshift(commission);
-  opp.timeline.unshift(event("commission_created_from_payment", `Comissão registrada pelo gestor: ${brl(amountCents)} sobre base de ${brl(baseCents)}`, currentUser.id, { paymentId: payment.id, commissionId: commission.id, sdrId }));
+  if (opp?.timeline) opp.timeline.unshift(event("commission_created_from_payment", `Comissao registrada pelo gestor: ${brl(amountCents)} sobre base de ${brl(baseCents)}`, currentUser.id, { paymentId: payment.id, commissionId: commission.id, sdrId }));
   addAudit("commission_created_from_payment", "CommissionEntry", commission.id, { paymentId: payment.id, contractId: contract.id, sdrId });
   addNotification(`Uma comissão de ${brl(amountCents)} foi registrada para você no contrato de ${opp.clientName}.`, {
     recipientUserId: sdrId,
