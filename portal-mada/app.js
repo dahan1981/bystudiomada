@@ -1525,6 +1525,7 @@ function render() {
   app.className = "layout";
   app.innerHTML = localizePortalCopy(`
     ${renderSidebar()}
+    ${mobileNavOpen ? '<button class="sidebar-backdrop" type="button" data-close-mobile-menu aria-label="Fechar menu"></button>' : ""}
     <main class="main">
       <header class="topbar">
         <div class="topbar-leading">
@@ -4869,6 +4870,11 @@ function bindApp() {
 
   document.querySelector("[data-mobile-menu]")?.addEventListener("click", () => {
     mobileNavOpen = !mobileNavOpen;
+    render();
+  });
+
+  document.querySelector("[data-close-mobile-menu]")?.addEventListener("click", () => {
+    mobileNavOpen = false;
     render();
   });
 

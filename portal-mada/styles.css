@@ -5467,6 +5467,24 @@ button.button:hover,
   color: var(--dusty-rose);
 }
 
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 820px) {
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    display: block;
+    border: 0;
+    padding: 0;
+    background: rgba(28, 28, 28, 0.42);
+    cursor: pointer;
+  }
+
+  .sidebar.is-open { z-index: 20; }
+  .mobile-menu.is-open { position: relative; z-index: 21; }
+}
+
 /* Quick-create surface opened from a day or time slot. */
 body:has(.meeting-form-card)::before {
   content: "";
