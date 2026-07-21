@@ -1614,9 +1614,11 @@ function bindMfaChallenge() {
   });
   document.querySelector("[data-mfa-challenge-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const form = event.currentTarget;
+    const code = new FormData(form).get("code");
     const errorBox = document.querySelector("[data-mfa-error]");
     try {
-      const enrollmentFactor = event.currentTarget.dataset.enrollmentFactor;
+      const enrollmentFactor = form.dataset.enrollmentFactor;
       let factorId = enrollmentFactor;
       if (!factorId) {
         const factors = await postPortal("/api/portal-auth", { action: "mfa_list" });
@@ -1624,7 +1626,7 @@ function bindMfaChallenge() {
         if (!factor) throw new Error("Nenhum autenticador configurado para esta conta.");
         factorId = factor.id;
       }
-      await postPortal("/api/portal-auth", { action: "mfa_verify", factorId, code: new FormData(event.currentTarget).get("code") });
+      await postPortal("/api/portal-auth", { action: "mfa_verify", factorId, code });
       mfaEnrollment = null;
       currentUser.mfaEnrolled = true;
       currentUser.mfaRequired = false;
