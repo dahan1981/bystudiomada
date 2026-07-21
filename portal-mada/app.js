@@ -1904,8 +1904,31 @@ function bindMeetingDateTimeControls() {
       input.value = `${dateInput.value}T${timeInput.value}`;
       input.dispatchEvent(new Event("change", { bubbles: true }));
     };
+    control._syncMeetingDateTime = sync;
     dateInput.addEventListener("change", sync);
     timeInput.addEventListener("input", sync);
+
+    if (input.name === "startsAt") {
+      const endInput = input.form?.querySelector('[name="endsAt"]');
+      const endControl = endInput?.nextElementSibling;
+      const endDateInput = endControl?.querySelector("[data-date-input]");
+      const endTimeInput = endControl?.querySelector("[data-meeting-time]");
+      const endDateLabel = endControl?.querySelector("[data-date-label]");
+      const updateEndTime = () => {
+        if (!endDateInput || !endTimeInput || !dateInput.value || !timeInput.value) return;
+        const nextHour = new Date(`${dateInput.value}T${timeInput.value}:00`);
+        if (Number.isNaN(nextHour.getTime())) return;
+        nextHour.setHours(nextHour.getHours() + 1);
+        const nextDate = [nextHour.getFullYear(), String(nextHour.getMonth() + 1).padStart(2, "0"), String(nextHour.getDate()).padStart(2, "0")].join("-");
+        endDateInput.value = nextDate;
+        endTimeInput.value = `${String(nextHour.getHours()).padStart(2, "0")}:${String(nextHour.getMinutes()).padStart(2, "0")}`;
+        if (endDateLabel) endDateLabel.textContent = dateLabel(nextDate);
+        endControl?._syncMeetingDateTime?.();
+      };
+      dateInput.addEventListener("change", updateEndTime);
+      timeInput.addEventListener("input", updateEndTime);
+      timeInput.addEventListener("change", updateEndTime);
+    }
   });
 }
 
