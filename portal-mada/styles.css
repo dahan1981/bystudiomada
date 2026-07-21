@@ -5485,6 +5485,25 @@ button.button:hover,
   .mobile-menu.is-open { position: relative; z-index: 21; }
 }
 
+@keyframes meeting-calendar-enter {
+  from {
+    opacity: 0.35;
+    transform: translateX(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.meeting-calendar-shell {
+  animation: meeting-calendar-enter 180ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meeting-calendar-shell { animation: none; }
+}
+
 /* Quick-create surface opened from a day or time slot. */
 body:has(.meeting-form-card)::before {
   content: "";
