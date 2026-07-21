@@ -1528,7 +1528,7 @@ function render() {
     <main class="main">
       <header class="topbar">
         <div class="topbar-leading">
-          <button class="mobile-menu icon-button" type="button" data-mobile-menu aria-label="Abrir menu">${renderIcon("menu")}</button>
+          <button class="mobile-menu icon-button ${mobileNavOpen ? "is-open" : ""}" type="button" data-mobile-menu aria-label="${mobileNavOpen ? "Fechar menu" : "Abrir menu"}">${renderIcon(mobileNavOpen ? "x" : "menu")}</button>
           <div class="topbar-context">
             <span>${currentUser.workspaceKind === "training" ? "Ambiente de treinamento" : "Mada Operação"}</span>
             <strong>${esc(routeLabel(currentRoute))}</strong>
@@ -1698,7 +1698,7 @@ function renderSidebar() {
     ? navItems.filter(([route]) => !["approvals", "services", "reports", "audit"].includes(route))
     : navItems;
   const groups = [
-    ["Comercial", ["dashboard", "opportunities", "progress", "approvals", "contracts"]],
+    ["Comercial", ["dashboard", "meetings", "opportunities", "progress", "approvals", "contracts"]],
     ["Financeiro", ["payments", "commissions", "files", "reports"]],
     ["Sistema", ["projects", "services", "audit", "settings"]],
   ].map(([title, routes]) => [title, allowed.filter(([route]) => routes.includes(route))]).filter(([, items]) => items.length);
