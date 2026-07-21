@@ -5563,6 +5563,113 @@ body:has(.meeting-form-card)::before {
   .segmented-control button { transition: none; }
 }
 
+.meeting-manager-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.meeting-manager-option {
+  position: relative;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--gray-border);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--black-primary);
+  font-weight: 650;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.meeting-manager-option:hover {
+  border-color: var(--gray-mid);
+  background: var(--gray-light);
+  transform: translateY(-1px);
+}
+
+.meeting-manager-option:has(input:checked) {
+  border-color: var(--lime);
+  background: var(--lime-soft);
+  box-shadow: 0 0 0 2px rgba(224, 247, 115, 0.35);
+}
+
+.meeting-manager-option input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.meeting-manager-option span {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  line-height: 1.2;
+}
+
+.meeting-manager-option span::before {
+  content: "";
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--gray-mid);
+  border-radius: 5px;
+  background: var(--white);
+  color: transparent;
+  font-size: 14px;
+  font-weight: 800;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.meeting-manager-option:has(input:checked) span::before {
+  content: "✓";
+  border-color: var(--black-primary);
+  background: var(--black-primary);
+  color: var(--lime);
+}
+
+.meeting-availability {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 12px 0 4px;
+}
+
+.meeting-availability-item {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border: 1px solid var(--lime-soft);
+  border-radius: 8px;
+  background: var(--off-white);
+  color: var(--gray-dark);
+  font-size: 12px;
+}
+
+.meeting-availability-item svg { color: var(--black-primary); }
+.meeting-availability-item strong { color: var(--black-primary); }
+
+.meeting-availability-item.is-busy {
+  border-color: var(--rose-light);
+  background: var(--rose-light);
+  color: var(--dusty-rose);
+}
+
+.meeting-availability-item.is-busy svg,
+.meeting-availability-item.is-busy strong { color: var(--dusty-rose); }
+
+@media (prefers-reduced-motion: reduce) {
+  .meeting-manager-option,
+  .meeting-manager-option span::before { transition: none; }
+}
+
 /* Quick-create surface opened from a day or time slot. */
 body:has(.meeting-form-card)::before {
   content: "";
