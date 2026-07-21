@@ -5679,6 +5679,15 @@ body:has(.meeting-form-card)::before {
   align-items: stretch;
 }
 
+.meeting-form-card .form-grid > .form-grid.two {
+  grid-column: 1 / -1;
+  width: 100%;
+}
+
+.meeting-form-card .form-grid.two > .field {
+  min-width: 0;
+}
+
 .meeting-datetime-control .portal-date-control { min-width: 0; }
 
 .meeting-datetime-control .portal-date-picker > summary {
