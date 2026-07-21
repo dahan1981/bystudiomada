@@ -5670,6 +5670,42 @@ body:has(.meeting-form-card)::before {
   .meeting-manager-option span::before { transition: none; }
 }
 
+.meeting-datetime-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 8px;
+  align-items: end;
+}
+
+.meeting-datetime-control .portal-date-control { min-width: 0; }
+
+.meeting-time-input {
+  display: grid;
+  gap: 5px;
+  color: var(--gray-dark);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.meeting-time-input input {
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid var(--gray-border);
+  border-radius: 7px;
+  color: var(--black-primary);
+  background: var(--white);
+}
+
+.meeting-time-input input:focus {
+  border-color: var(--lime);
+  outline: 2px solid var(--lime-soft);
+  outline-offset: 1px;
+}
+
+@media (max-width: 600px) {
+  .meeting-datetime-control { grid-template-columns: 1fr; }
+}
+
 /* Quick-create surface opened from a day or time slot. */
 body:has(.meeting-form-card)::before {
   content: "";

@@ -1889,6 +1889,26 @@ function meetingAvailabilitySummary(form) {
   }).join("");
 }
 
+function bindMeetingDateTimeControls() {
+  document.querySelectorAll('[data-meeting-form] input[type="datetime-local"]').forEach((input) => {
+    const value = input.value || meetingDateTimeLocal(new Date());
+    const dateValue = value.slice(0, 10);
+    const timeValue = value.slice(11, 16) || "09:00";
+    input.type = "hidden";
+    input.classList.add("meeting-datetime-value");
+    input.insertAdjacentHTML("afterend", `<div class="meeting-datetime-control" data-meeting-datetime-control><div class="portal-date-control" data-date-control><input type="hidden" value="${dateValue}" data-date-input /><details class="progress-picker date-picker portal-date-picker" data-date-picker><summary>${renderIcon("calendar-days")}<span data-date-label>${dateLabel(dateValue)}</span>${renderIcon("chevron-down")}</summary><div class="progress-popover progress-calendar" data-date-calendar data-month="${dateValue}">${progressCalendarBody(dateValue, dateValue)}</div></details></div><label class="meeting-time-input"><span>Horário</span><input type="time" value="${timeValue}" data-meeting-time /></label></div>`);
+    const control = input.nextElementSibling;
+    const dateInput = control.querySelector("[data-date-input]");
+    const timeInput = control.querySelector("[data-meeting-time]");
+    const sync = () => {
+      input.value = `${dateInput.value}T${timeInput.value}`;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    dateInput.addEventListener("change", sync);
+    timeInput.addEventListener("input", sync);
+  });
+}
+
 function renderMeetingsCalendar() {
   const title = "Calendário de Reuniões";
   const subtitle = currentUser.role === "admin_manager" ? "Agenda comercial da equipe e disponibilidade dos gestores." : "Marque e acompanhe as reuniões dos seus leads.";
@@ -5012,6 +5032,7 @@ function bindApp() {
   bindForms();
   bindActions();
   bindProgressControls();
+  bindMeetingDateTimeControls();
   bindDateControls();
   bindFilters();
 
