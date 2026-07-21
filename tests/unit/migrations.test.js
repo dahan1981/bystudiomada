@@ -10,7 +10,7 @@ test("all portal tables enable RLS and Storage remains private", () => {
     assert(sql.includes(`alter table public.${table} enable row level security`), `${table} must enable RLS`);
   }
   assert(sql.includes("'portal-documents'"));
-  assert(sql.includes("false,\n  10485760"));
+  assert(/false,\s+10485760/.test(sql));
   assert(sql.includes("with check"));
   assert(sql.includes("alter column contract_id drop not null"), "manual payments must allow an optional CRM contract");
   assert(sql.includes("portal_guard_terminal_rejection"), "rejected opportunities must have a terminal database guard");
