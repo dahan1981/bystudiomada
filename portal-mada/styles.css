@@ -49,9 +49,11 @@
 .meeting-weekdays span { padding-left: 8px; }
 .meeting-month-grid { border-top: 1px solid var(--line); }
 .meeting-day { min-height: 142px; padding: 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
+.meeting-day[data-meeting-slot] { cursor: pointer; transition: background-color 150ms ease, box-shadow 150ms ease; }
+.meeting-day[data-meeting-slot]:hover { background: var(--off-white); box-shadow: inset 0 0 0 2px var(--lime-soft); }
 .meeting-day:nth-child(7n) { border-right: 0; }
 .meeting-day.is-empty { background: var(--surface-soft); }
-.meeting-day-number { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--text); cursor: pointer; text-align: center; }
+.meeting-day-number { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: transparent; color: var(--text); font-size: 12px; }
 .meeting-day-number:hover { background: var(--brand-soft); color: var(--brand); }
 .meeting-day-events { display: grid; gap: 5px; margin-top: 5px; }
 .meeting-event { display: grid; gap: 2px; width: 100%; padding: 7px 8px; border: 0; border-left: 3px solid var(--brand); border-radius: 5px; background: var(--brand-soft); color: var(--text); text-align: left; cursor: pointer; }

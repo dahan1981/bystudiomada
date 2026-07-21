@@ -1855,7 +1855,7 @@ function renderMeetingMonth() {
   for (let day = 1; day <= days; day += 1) {
     const date = new Date(year, month, day);
     const key = dateOnlyValue(date);
-    cells.push(`<div class="meeting-day"><button type="button" class="meeting-day-number" data-meeting-slot="${key}T09:00">${day}</button><div class="meeting-day-events">${meetingsForDay(key).slice(0, 4).map(meetingEventCard).join("")}</div></div>`);
+    cells.push(`<div class="meeting-day" data-meeting-slot="${key}T09:00"><span class="meeting-day-number">${day}</span><div class="meeting-day-events">${meetingsForDay(key).slice(0, 4).map(meetingEventCard).join("")}</div></div>`);
   }
   return `<section class="meeting-calendar-shell"><div class="meeting-calendar-toolbar"><div><button class="icon-button" type="button" data-meetings-nav="-1">${renderIcon("chevron-left")}</button><button class="icon-button" type="button" data-meetings-nav="1">${renderIcon("chevron-right")}</button><button class="button secondary compact-button" type="button" data-meetings-today>Hoje</button><strong>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</strong></div><div class="segmented-control">${["month", "week", "day"].map((mode) => `<button type="button" class="${meetingsView === mode ? "is-active" : ""}" data-meetings-view="${mode}">${mode === "month" ? "Mês" : mode === "week" ? "Semana" : "Dia"}</button>`).join("")}</div></div><div class="meeting-weekdays">${["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => `<span>${day}</span>`).join("")}</div><div class="meeting-month-grid">${cells.join("")}</div></section>`;
 }
@@ -4830,7 +4830,8 @@ function bindApp() {
     currentRoute = "meetings";
     render();
   }));
-  document.querySelectorAll("[data-meeting-slot]").forEach((button) => button.addEventListener("click", () => {
+  document.querySelectorAll("[data-meeting-slot]").forEach((button) => button.addEventListener("click", (event) => {
+    if (event.target.closest("[data-open-meeting]")) return;
     const start = new Date(button.dataset.meetingSlot);
     meetingFormContext = { startsAt: start.toISOString(), endsAt: new Date(start.getTime() + 60 * 60000).toISOString() };
     render();
