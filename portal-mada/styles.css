@@ -5466,3 +5466,102 @@ button.button:hover,
   background: var(--rose-light);
   color: var(--dusty-rose);
 }
+
+/* Quick-create surface opened from a day or time slot. */
+body:has(.meeting-form-card)::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgba(28, 28, 28, 0.38);
+  backdrop-filter: blur(2px);
+}
+
+.meeting-form-card {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  z-index: 41;
+  width: min(720px, calc(100vw - 32px));
+  max-height: min(780px, calc(100vh - 32px));
+  margin: 0;
+  overflow-y: auto;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--gray-border);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.24);
+}
+
+.meeting-form-card .section-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: -24px -24px 20px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--gray-border);
+  background: var(--white);
+}
+
+.meeting-form-card .section-head h3 {
+  margin: 3px 0 4px;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+.meeting-form-card .section-head p { margin: 0; color: var(--muted); }
+
+.meeting-quick-kicker {
+  color: var(--dusty-rose);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.meeting-title-field input {
+  min-height: 48px;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.meeting-quick-actions {
+  justify-content: flex-end;
+  padding-top: 8px;
+}
+
+.meeting-event {
+  min-height: 56px;
+  border: 1px solid transparent;
+  border-left: 4px solid var(--lime);
+  border-radius: 7px;
+  box-shadow: 0 2px 0 rgba(28, 28, 28, 0.05);
+}
+
+.meeting-event:hover {
+  border-color: var(--gray-mid);
+  border-left-color: var(--lime);
+  transform: translateY(-1px);
+}
+
+.meeting-event-time,
+.meeting-event-title,
+.meeting-event-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meeting-event-time { font-size: 10px; font-weight: 750; }
+.meeting-event-title { font-size: 12px; }
+.meeting-event-meta { color: var(--muted); font-size: 10px; }
+
+@media (max-width: 760px) {
+  body:has(.meeting-form-card)::before { background: rgba(28, 28, 28, 0.48); }
+  .meeting-form-card {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    border-radius: 12px;
+  }
+  .meeting-form-card .section-head { margin: -18px -18px 18px; padding: 16px 18px 14px; }
+  .meeting-form-card .form-grid { gap: 12px; }
+}
