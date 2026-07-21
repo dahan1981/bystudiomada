@@ -5345,7 +5345,7 @@ button.progress-condition {
   }
 }
 
-/* Mada visual language: neutral base with lime and dusty rose accents. */
+/* Mada visual language: neutral base with royal blue and restrained status accents. */
 :root {
   --black-primary: #1C1C1C;
   --black-pure: #000000;
@@ -5356,8 +5356,9 @@ button.progress-condition {
   --gray-light: #F4F4F4;
   --off-white: #FAFAFA;
   --white: #FFFFFF;
-  --lime: #E0F773;
-  --lime-soft: #E8F5AF;
+  --royal-blue: #3157D5;
+  --lime: #3157D5;
+  --lime-soft: #E9EEFF;
   --dusty-rose: #A77888;
   --rose-light: #F7CDDB;
   --bg: var(--off-white);
@@ -5368,8 +5369,8 @@ button.progress-condition {
   --text: var(--black-primary);
   --muted: var(--gray-dark);
   --muted-2: var(--gray-mid);
-  --brand: var(--lime);
-  --brand-strong: var(--black-primary);
+  --brand: var(--royal-blue, #3157D5);
+  --brand-strong: #1F3FA8;
   --brand-soft: var(--lime-soft);
   --sidebar-bg: var(--black-pure);
   --sidebar-panel: var(--black-primary);
@@ -5379,7 +5380,7 @@ button.progress-condition {
   --butter: var(--lime-soft);
   --rose: var(--rose-light);
   --blue: var(--gray-calendar);
-  --green: var(--lime);
+  --green: #0E9F6E;
   --red: var(--dusty-rose);
   --orange: var(--dusty-rose);
   --ink: var(--black-primary);
@@ -5394,14 +5395,15 @@ button.button,
 .primary-action,
 .progress-save,
 .progress-condition.review {
-  color: var(--black-primary);
+  color: var(--white);
 }
 
 .button:hover,
 button.button:hover,
 .primary-action:hover,
 .progress-save:hover {
-  background: var(--lime-soft);
+  background: var(--brand-strong);
+  color: var(--white);
 }
 
 .progress-stage-pill.stage-manager_meeting,
@@ -5425,7 +5427,7 @@ button.button:hover,
 
 .progress-calendar-days button.is-selected,
 .progress-condition.review {
-  color: var(--black-primary);
+  color: var(--white);
   background: var(--lime);
   border-color: var(--lime);
 }

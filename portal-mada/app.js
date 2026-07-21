@@ -159,8 +159,6 @@ const navItems = [
   ["settings", "Configurações", "settings-2"],
 ];
 
-navItems.splice(2, 0, ["progress", "Andamento", "activity"]);
-
 const roleLabels = {
   admin_manager: "Gestor",
   sdr: "SDR",
@@ -1542,7 +1540,7 @@ function render() {
         </button>
         <div class="topbar-actions">
           <span class="topbar-sync ${supabaseSyncReady ? "is-online" : ""}" title="${esc(supabaseSyncStatus)}"><i></i><span>${supabaseSyncStatus === "Salvando alterações" ? "Salvando" : "Dados salvos"}</span></span>
-          ${["dashboard", "opportunities", "progress"].includes(currentRoute) ? `<button class="button topbar-create" type="button" data-new-opportunity aria-label="Nova oportunidade">${renderIcon("plus")}<span>Nova oportunidade</span></button>` : ""}
+          ${["dashboard", "opportunities"].includes(currentRoute) ? `<button class="button topbar-create" type="button" data-new-opportunity aria-label="Nova oportunidade">${renderIcon("plus")}<span>Nova oportunidade</span></button>` : ""}
           <button class="notification icon-button" type="button" data-route="notifications" aria-label="Notificações">
             ${renderIcon("bell")}
             <span>${visibleNotifications().filter((item) => !item.read).length}</span>
@@ -1699,7 +1697,7 @@ function renderSidebar() {
     ? navItems.filter(([route]) => !["approvals", "services", "reports", "audit"].includes(route))
     : navItems;
   const groups = [
-    ["Comercial", ["dashboard", "meetings", "opportunities", "progress", "approvals", "contracts"]],
+    ["Comercial", ["dashboard", "meetings", "opportunities", "approvals", "contracts"]],
     ["Financeiro", ["payments", "commissions", "files", "reports"]],
     ["Sistema", ["projects", "services", "audit", "settings"]],
   ].map(([title, routes]) => [title, allowed.filter(([route]) => routes.includes(route))]).filter(([, items]) => items.length);
@@ -1790,7 +1788,6 @@ function renderRoute() {
     opportunities: renderOpportunities,
     archived: renderArchivedOpportunities,
     notifications: renderNotifications,
-    progress: renderOpportunityProgress,
     contracts: renderContractsPipeline,
     payments: renderPayments,
     commissions: renderCommissions,
@@ -2059,7 +2056,7 @@ function renderDashboard() {
       <section class="card pipeline-card">
         <div class="section-head">
           <div><h3>Pipeline comercial</h3><p>Visão rápida da jornada até a venda concluída.</p></div>
-          <button class="button ghost compact-button" type="button" data-route="progress">Ver andamento ${renderIcon("arrow-right")}</button>
+          <button class="button ghost compact-button" type="button" data-route="opportunities">Ver leads ${renderIcon("arrow-right")}</button>
         </div>
         <div class="pipeline-strip" aria-label="Etapas do pipeline comercial">
           ${pipeline.map(([label, value], index) => `
@@ -2464,6 +2461,21 @@ function renderProgressDatePicker(item) {
   `;
 }
 
+function renderLeadControlFields(opportunity = {}) {
+  const status = opportunity.crmStatus || "lead_mapped";
+  return `
+    <section class="card lead-control-card">
+      <div class="section-head"><div><p class="section-title">Controle do lead</p><p>Atualize a etapa e a próxima ação diretamente no lead. Cada alteração aparece na timeline.</p></div>${renderIcon("activity")}</div>
+      <div class="form-grid">
+        <label class="field"><span>Etapa do CRM</span><select name="crmStatus">${Object.entries(crmStatusLabels).map(([value, label]) => `<option value="${value}" ${value === status ? "selected" : ""}>${esc(label)}</option>`).join("")}</select></label>
+        <label class="field"><span>Próxima ação</span><input name="nextAction" value="${esc(opportunity.nextAction || "")}" placeholder="Ex. Preparar proposta" /></label>
+        ${renderDateField("Data da próxima ação", "nextActionDate", opportunity.nextActionDate || "")}
+        <label class="field full"><span>Observações do acompanhamento</span><textarea name="notes" placeholder="Registre o contexto do próximo contato, prazo ou combinado.">${esc(opportunity.notes || "")}</textarea></label>
+      </div>
+    </section>
+  `;
+}
+
 function renderProgressConditionAction(item) {
   const canAct = currentUser.role === "admin_manager" || (currentUser.role === "sdr" && item.sdrId === currentUser.id);
   const missing = conditionApprovalMissingFields(item);
@@ -2578,7 +2590,6 @@ function opportunityTable(items, approvalMode = false) {
                     ${currentUser.role === "sdr" && item.sdrId === currentUser.id && canRequestConditionApproval(item) ? `<button type="button" data-submit-opportunity="${item.id}">${renderIcon("send")}<span><strong>Pedir aprovação</strong><small>Enviar condição ao gestor</small></span></button>` : ""}
                     <button type="button" data-archive-opportunity="${item.id}">${renderIcon("archive")}<span><strong>Arquivar</strong><small>Remover da visão ativa</small></span></button>
                     <button type="button" data-duplicate-opportunity="${item.id}">${renderIcon("copy")}<span><strong>Duplicar</strong><small>Criar a partir deste registro</small></span></button>
-                    <button type="button" data-route="progress">${renderIcon("activity")}<span><strong>Atualizar andamento</strong><small>Status e próxima ação</small></span></button>
                   </div>
                 </details>
               </td>
@@ -3814,6 +3825,7 @@ function opportunityFormFields(opportunity = {}) {
         </label>
       </div>
     </section>
+    ${renderLeadControlFields(opportunity)}
   `;
 }
 
@@ -5779,10 +5791,10 @@ async function createOpportunity(form, intent) {
     suggestedPaymentTerms: requestedPaymentPlan,
     objections: form.get("objections"),
     lossReason: "",
-    nextAction: "",
-    nextActionDate: "",
-    notes: "",
-    crmStatus: "lead_mapped",
+    nextAction: String(form.get("nextAction") || "").trim(),
+    nextActionDate: form.get("nextActionDate") || "",
+    notes: String(form.get("notes") || "").trim(),
+    crmStatus: crmStatusLabels[form.get("crmStatus")] ? form.get("crmStatus") : "lead_mapped",
     status: "draft",
     createdAt: nowIso(),
     updatedAt: nowIso(),
@@ -5861,11 +5873,25 @@ async function updateOpportunityDetails(id, form, requestApproval = false) {
   opp.suggestedPaymentTerms = requestedPaymentPlan;
   opp.objections = form.get("objections");
   opp.lossReason = opp.lossReason || "";
-  opp.nextAction = opp.nextAction || "";
-  opp.nextActionDate = opp.nextActionDate || "";
-  opp.notes = opp.notes || "";
-  opp.crmStatus = opp.crmStatus || "lead_mapped";
+  const previousCrmStatus = opp.crmStatus || "lead_mapped";
+  const previousNextAction = opp.nextAction || "";
+  const previousNextActionDate = opp.nextActionDate || "";
+  const previousNotes = opp.notes || "";
+  opp.nextAction = String(form.get("nextAction") || "").trim();
+  opp.nextActionDate = form.get("nextActionDate") || "";
+  opp.notes = String(form.get("notes") || "").trim();
+  opp.crmStatus = crmStatusLabels[form.get("crmStatus")] ? form.get("crmStatus") : previousCrmStatus;
   opp.updatedAt = nowIso();
+  if (previousCrmStatus !== opp.crmStatus) {
+    opp.timeline.unshift(event("crm_status_updated", `Etapa do lead alterada de ${crmStatusLabels[previousCrmStatus] || previousCrmStatus} para ${crmStatusLabels[opp.crmStatus]}`, currentUser.id, { previousStatus: previousCrmStatus, crmStatus: opp.crmStatus }));
+  }
+  if (previousNextAction !== opp.nextAction || previousNextActionDate !== opp.nextActionDate) {
+    const actionLabel = opp.nextAction ? `Próxima ação definida: ${opp.nextAction}${opp.nextActionDate ? ` em ${dateLabel(opp.nextActionDate)}` : ""}` : "Próxima ação removida";
+    opp.timeline.unshift(event("lead_follow_up_updated", actionLabel, currentUser.id, { nextAction: opp.nextAction, nextActionDate: opp.nextActionDate }));
+  }
+  if (previousNotes !== opp.notes) {
+    opp.timeline.unshift(event("lead_notes_updated", "Observações do lead atualizadas", currentUser.id));
+  }
   opp.timeline.unshift(event("opportunity_crm_updated", "Informações do CRM atualizadas", currentUser.id));
   addAudit("opportunity_crm_updated", "Opportunity", id, { crmStatus: opp.crmStatus });
   notifyOpportunityTeam(opp, `As informações da oportunidade de ${opp.clientName} foram atualizadas por ${currentUser.name}.`, {
