@@ -145,6 +145,7 @@ const legacyServiceIdMap = {
 };
 const navItems = [
   ["dashboard", "Dashboard", "layout-dashboard"],
+  ["meetings", "Calendário de Reuniões", "calendar-days"],
   ["opportunities", "Oportunidades", "table-properties"],
   ["approvals", "Aprovações", "badge-check"],
   ["contracts", "Contratos", "file-signature"],
@@ -166,6 +167,12 @@ const roleLabels = {
 };
 
 const statusLabels = {
+  scheduled: "Agendada",
+  confirmed: "Confirmada",
+  completed: "Realizada",
+  rescheduled: "Reagendada",
+  cancelled: "Cancelada",
+  no_show: "Lead não compareceu",
   draft: "Rascunho",
   pending_approval: "Aguardando aprovação",
   needs_information: "Mais informações",
@@ -215,6 +222,7 @@ const crmStatusLabels = {
   follow_up: "Em follow-up",
   replied: "Respondeu",
   manager_meeting: "Reunião dos gestores com o cliente",
+  meeting_scheduled: "Reunião agendada",
   proposal_sent_crm: "Proposta enviada",
   negotiating: "Em negociação",
   awaiting_contract_payment: "Aguardando contrato/pagamento",
@@ -229,6 +237,7 @@ const crmStatusClasses = {
   follow_up: "awaiting",
   replied: "info",
   manager_meeting: "ready",
+  meeting_scheduled: "ready",
   proposal_sent_crm: "sent",
   negotiating: "pending",
   awaiting_contract_payment: "awaiting",
@@ -296,6 +305,7 @@ const crmPipelineStatuses = [
   "follow_up",
   "replied",
   "manager_meeting",
+  "meeting_scheduled",
   "proposal_sent_crm",
   "negotiating",
   "awaiting_contract_payment",
@@ -376,6 +386,9 @@ var state = normalizeState(seedState());
 let currentUser = null;
 let authReady = false;
 let currentRoute = "dashboard";
+let meetingsView = "month";
+let meetingsCursor = new Date();
+let meetingFormContext = null;
 let drawer = null;
 let commandMenuOpen = false;
 let toastTimer = null;
@@ -458,6 +471,7 @@ function seedState() {
     users: [],
     services,
     opportunities: [],
+    meetings: [],
     approvalRequests: [],
     conditions: [],
     contracts: [],
@@ -478,6 +492,20 @@ function normalizeState(data) {
   data.projects = data.projects || [];
   data.contracts = data.contracts || [];
   data.opportunities = data.opportunities || [];
+  data.meetings = data.meetings || [];
+  data.meetings.forEach((meeting) => {
+    meeting.managerIds = Array.isArray(meeting.managerIds) ? meeting.managerIds : [];
+    meeting.status = meeting.status || "scheduled";
+    meeting.brandName = meeting.brandName || "";
+    meeting.context = meeting.context || "";
+    meeting.notes = meeting.notes || "";
+    meeting.meetingLink = meeting.meetingLink || "";
+    meeting.startsAt = meeting.startsAt || nowIso();
+    meeting.endsAt = meeting.endsAt || new Date(new Date(meeting.startsAt).getTime() + 60 * 60000).toISOString();
+    meeting.sdrId = meeting.sdrId || meeting.createdBy || null;
+    meeting.createdAt = meeting.createdAt || nowIso();
+    meeting.updatedAt = meeting.updatedAt || meeting.createdAt;
+  });
   data.opportunities.forEach((opportunity) => {
     opportunity.serviceIds = normalizeServiceIds(opportunity.serviceIds, opportunity.serviceId, data.services);
     opportunity.serviceId = opportunity.serviceIds[0] || normalizeServiceId(opportunity.serviceId) || data.services[0]?.id;
@@ -640,7 +668,7 @@ function saveState() {
 }
 
 const persistedCollections = [
-  "opportunities", "conditions", "contracts", "payments", "commissions",
+  "opportunities", "meetings", "conditions", "contracts", "payments", "commissions",
   "payoutBatches", "projects", "files", "notifications", "auditLogs",
 ];
 
@@ -1094,6 +1122,9 @@ function recentActivityText(item) {
 }
 
 const auditActionLabels = {
+  meeting_scheduled: "Reunião agendada",
+  meeting_rescheduled: "Reunião reagendada",
+  meeting_updated: "Reunião atualizada",
   opportunity_created: "Oportunidade criada",
   opportunity_submitted: "Oportunidade enviada para aprovação",
   opportunity_crm_updated: "Informações da oportunidade atualizadas",
@@ -1492,7 +1523,7 @@ function render() {
   }
 
   app.className = "layout";
-  app.innerHTML = `
+  app.innerHTML = localizePortalCopy(`
     ${renderSidebar()}
     <main class="main">
       <header class="topbar">
@@ -1522,9 +1553,17 @@ function render() {
     </main>
     ${drawer ? renderDrawer() : ""}
     ${commandMenuOpen ? renderCommandMenu() : ""}
-  `;
+  `);
   bindApp();
   refreshIcons();
+}
+
+function localizePortalCopy(html) {
+  return String(html)
+    .replaceAll("Oportunidades", "Leads")
+    .replaceAll("Oportunidade", "Lead")
+    .replaceAll("oportunidades", "leads")
+    .replaceAll("oportunidade", "lead");
 }
 
 function renderMfaChallenge() {
@@ -1743,6 +1782,7 @@ function renderCommandMenu() {
 function renderRoute() {
   const routes = {
     dashboard: renderDashboard,
+    meetings: renderMeetingsCalendar,
     approvals: renderApprovals,
     opportunities: renderOpportunities,
     archived: renderArchivedOpportunities,
@@ -1759,6 +1799,148 @@ function renderRoute() {
     settings: renderSettings,
   };
   return (routes[currentRoute] || renderDashboard)();
+}
+
+function meetingManagers() {
+  return state.users.filter((user) => user.role === "admin_manager" && user.active !== false);
+}
+
+function meetingStatusLabel(status) {
+  return statusLabels[status] || status || "Agendada";
+}
+
+function meetingDateTimeLocal(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function meetingDateKey(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "" : dateOnlyValue(date);
+}
+
+function meetingsForDay(value) {
+  const key = typeof value === "string" ? value : dateOnlyValue(value);
+  return state.meetings.filter((meeting) => meetingDateKey(meeting.startsAt) === key && meeting.status !== "cancelled");
+}
+
+function meetingTimeLabel(value) {
+  return new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(new Date(value));
+}
+
+function meetingDateLabel(value) {
+  return new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short" }).format(new Date(value));
+}
+
+function meetingEventCard(meeting) {
+  const managerNames = (meeting.managerIds || []).map((id) => getActorName(id)).join(", ");
+  return `<button type="button" class="meeting-event meeting-status-${esc(meeting.status)}" data-open-meeting="${meeting.id}"><strong>${meetingTimeLabel(meeting.startsAt)} - ${meetingTimeLabel(meeting.endsAt)}</strong><span>${esc(meeting.brandName)}</span><small>${esc(managerNames || "Gestor a definir")} · ${esc(meetingStatusLabel(meeting.status))}</small></button>`;
+}
+
+function renderMeetingMonth() {
+  const year = meetingsCursor.getFullYear();
+  const month = meetingsCursor.getMonth();
+  const first = new Date(year, month, 1);
+  const days = new Date(year, month + 1, 0).getDate();
+  const start = first.getDay();
+  const label = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(first);
+  const cells = [];
+  for (let i = 0; i < start; i += 1) cells.push(`<div class="meeting-day is-empty"></div>`);
+  for (let day = 1; day <= days; day += 1) {
+    const date = new Date(year, month, day);
+    const key = dateOnlyValue(date);
+    cells.push(`<div class="meeting-day"><button type="button" class="meeting-day-number" data-meeting-slot="${key}T09:00">${day}</button><div class="meeting-day-events">${meetingsForDay(key).slice(0, 4).map(meetingEventCard).join("")}</div></div>`);
+  }
+  return `<section class="meeting-calendar-shell"><div class="meeting-calendar-toolbar"><div><button class="icon-button" type="button" data-meetings-nav="-1">${renderIcon("chevron-left")}</button><button class="icon-button" type="button" data-meetings-nav="1">${renderIcon("chevron-right")}</button><button class="button secondary compact-button" type="button" data-meetings-today>Hoje</button><strong>${esc(label.charAt(0).toUpperCase() + label.slice(1))}</strong></div><div class="segmented-control">${["month", "week", "day"].map((mode) => `<button type="button" class="${meetingsView === mode ? "is-active" : ""}" data-meetings-view="${mode}">${mode === "month" ? "Mês" : mode === "week" ? "Semana" : "Dia"}</button>`).join("")}</div></div><div class="meeting-weekdays">${["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => `<span>${day}</span>`).join("")}</div><div class="meeting-month-grid">${cells.join("")}</div></section>`;
+}
+
+function renderMeetingTimeline(mode) {
+  const base = mode === "day" ? new Date(meetingsCursor) : new Date(meetingsCursor.getFullYear(), meetingsCursor.getMonth(), meetingsCursor.getDate() - meetingsCursor.getDay());
+  const count = mode === "day" ? 1 : 7;
+  const columns = Array.from({ length: count }, (_, index) => new Date(base.getFullYear(), base.getMonth(), base.getDate() + index));
+  const hours = Array.from({ length: 12 }, (_, index) => index + 8);
+  return `<section class="meeting-calendar-shell meeting-timeline-shell"><div class="meeting-calendar-toolbar"><strong>${mode === "day" ? meetingDateLabel(base) : `${meetingDateLabel(columns[0])} - ${meetingDateLabel(columns[columns.length - 1])}`}</strong><div class="segmented-control">${["month", "week", "day"].map((item) => `<button type="button" class="${meetingsView === item ? "is-active" : ""}" data-meetings-view="${item}">${item === "month" ? "Mês" : item === "week" ? "Semana" : "Dia"}</button>`).join("")}</div></div><div class="meeting-timeline-grid" style="--meeting-columns:${count}"><div class="meeting-time-column">${hours.map((hour) => `<span>${String(hour).padStart(2, "0")}:00</span>`).join("")}</div>${columns.map((date) => { const key = dateOnlyValue(date); return `<div class="meeting-time-day"><strong>${meetingDateLabel(date)}</strong>${hours.map((hour) => `<button type="button" class="meeting-time-slot" data-meeting-slot="${key}T${String(hour).padStart(2, "0")}:00"><span>${hour}:00</span></button>`).join("")}${meetingsForDay(key).map(meetingEventCard).join("")}</div>`; }).join("")}</div></section>`;
+}
+
+function renderMeetingForm() {
+  if (!meetingFormContext) return "";
+  const meeting = meetingFormContext.id ? byId(state.meetings, meetingFormContext.id) : null;
+  const managerOptions = meetingManagers().map((user) => `<label class="meeting-manager-option"><input type="checkbox" name="managerIds" value="${user.id}" ${(meeting?.managerIds || []).includes(user.id) ? "checked" : ""} /><span>${esc(user.name)}</span></label>`).join("");
+  const start = meeting?.startsAt || meetingFormContext.startsAt || "";
+  const end = meeting?.endsAt || meetingFormContext.endsAt || "";
+  return `<section class="card meeting-form-card"><div class="section-head"><div><h3>${meeting ? "Editar reunião" : "Nova reunião"}</h3><p>Organize a conversa comercial entre o lead e os gestores.</p></div><button type="button" class="icon-button" data-close-meeting-form>${renderIcon("x")}</button></div><form class="form-grid" data-meeting-form><input type="hidden" name="id" value="${esc(meeting?.id || "")}" /><label class="field"><span>Marca ou cliente *</span><input name="brandName" required value="${esc(meeting?.brandName || "")}" placeholder="Nome da marca ou cliente" /></label><label class="field"><span>Lead relacionado *</span><select name="opportunityId" required><option value="">Selecione um lead</option>${visibleOpportunities().filter((item) => !isArchivedOpportunity(item)).map((item) => `<option value="${item.id}" ${(meeting?.opportunityId || "") === item.id ? "selected" : ""}>${esc(item.clientName)}${item.brandName ? ` - ${esc(item.brandName)}` : ""}</option>`).join("")}</select></label><div class="form-grid two"><label class="field"><span>Início *</span><input name="startsAt" type="datetime-local" required value="${meetingDateTimeLocal(start)}" /></label><label class="field"><span>Término *</span><input name="endsAt" type="datetime-local" required value="${meetingDateTimeLocal(end)}" /></label></div><fieldset class="field full meeting-manager-field"><legend>Gestor(es) participante(s) *</legend><div class="meeting-manager-list">${managerOptions || `<small>Nenhum gestor disponível.</small>`}</div><div class="meeting-availability" data-meeting-availability></div><small>O sistema bloqueia conflitos de agenda entre os gestores selecionados.</small></fieldset><label class="field full"><span>Contexto da reunião *</span><textarea name="context" required placeholder="Histórico da conversa, necessidades, serviços de interesse e objetivo.">${esc(meeting?.context || "")}</textarea></label><label class="field"><span>Link da reunião</span><input name="meetingLink" type="url" value="${esc(meeting?.meetingLink || "")}" placeholder="https://..." /></label><label class="field"><span>Status</span><select name="status">${["scheduled", "confirmed", "completed", "rescheduled", "cancelled", "no_show"].map((status) => `<option value="${status}" ${(meeting?.status || "scheduled") === status ? "selected" : ""}>${meetingStatusLabel(status)}</option>`).join("")}</select></label><label class="field full"><span>Observações</span><textarea name="notes" placeholder="Informações adicionais, opcional.">${esc(meeting?.notes || "")}</textarea></label><div class="actions full"><button class="button" type="submit">${meeting ? "Salvar reunião" : "Criar reunião"}</button><button class="button secondary" type="button" data-close-meeting-form>Cancelar</button></div></form></section>`;
+}
+
+function meetingAvailabilitySummary(form) {
+  const start = new Date(form.querySelector('[name="startsAt"]')?.value || "");
+  const end = new Date(form.querySelector('[name="endsAt"]')?.value || "");
+  const id = form.querySelector('[name="id"]')?.value || "";
+  const managerIds = [...form.querySelectorAll('[name="managerIds"]:checked')].map((input) => input.value);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || !managerIds.length) return "<small>Selecione gestores e horário para consultar a disponibilidade.</small>";
+  return managerIds.map((managerId) => {
+    const conflict = state.meetings.find((meeting) => meeting.id !== id && meeting.status !== "cancelled" && (meeting.managerIds || []).includes(managerId) && start < new Date(meeting.endsAt) && end > new Date(meeting.startsAt));
+    return `<span class="meeting-availability-item ${conflict ? "is-busy" : "is-free"}">${renderIcon(conflict ? "circle-x" : "circle-check")} ${esc(getActorName(managerId))}: <strong>${conflict ? "Ocupado" : "Disponível"}</strong></span>`;
+  }).join("");
+}
+
+function renderMeetingsCalendar() {
+  const title = "Calendário de Reuniões";
+  const subtitle = currentUser.role === "admin_manager" ? "Agenda comercial da equipe e disponibilidade dos gestores." : "Marque e acompanhe as reuniões dos seus leads.";
+  const calendar = meetingsView === "month" ? renderMeetingMonth() : renderMeetingTimeline(meetingsView);
+  return `${pageHead(title, subtitle, `<button class="button" type="button" data-new-meeting>${renderIcon("plus")} Nova reunião</button>`)}<section class="card meeting-notice"><strong>Agenda comercial</strong><span>Horários ocupados aparecem sem detalhes privados para SDRs. Clique em um dia ou horário para criar uma reunião.</span></section>${calendar}${renderMeetingForm()}`;
+}
+
+function saveMeetingFromForm(formElement) {
+  const form = new FormData(formElement);
+  const id = String(form.get("id") || "");
+  const startsAt = new Date(String(form.get("startsAt") || ""));
+  const endsAt = new Date(String(form.get("endsAt") || ""));
+  const opportunityId = String(form.get("opportunityId") || "");
+  const managerIds = form.getAll("managerIds");
+  if (!String(form.get("brandName") || "").trim() || !opportunityId || !managerIds.length) return toast("Preencha cliente, lead e pelo menos um gestor.");
+  if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()) || endsAt <= startsAt) return toast("Defina um intervalo de horário válido.");
+  const existing = id ? byId(state.meetings, id) : null;
+  const conflict = state.meetings.find((meeting) => meeting.id !== id && meeting.status !== "cancelled" && (meeting.managerIds || []).some((managerId) => managerIds.includes(managerId)) && startsAt < new Date(meeting.endsAt) && endsAt > new Date(meeting.startsAt));
+  if (conflict) return toast(`Conflito de agenda: ${getActorName((conflict.managerIds || []).find((managerId) => managerIds.includes(managerId)))} já possui uma reunião nesse horário.`);
+  const selectedLead = byId(state.opportunities, opportunityId);
+  if (!selectedLead) return toast("Lead relacionado não encontrado.");
+  const status = String(form.get("status") || "scheduled");
+  const previousTime = existing ? `${meetingDateLabel(existing.startsAt)} ${meetingTimeLabel(existing.startsAt)}` : "";
+  const meeting = {
+    ...(existing || {}),
+    id: id || uid("meeting"),
+    opportunityId,
+    brandName: String(form.get("brandName") || "").trim(),
+    startsAt: startsAt.toISOString(),
+    endsAt: endsAt.toISOString(),
+    managerIds,
+    sdrId: existing?.sdrId || currentUser.id,
+    createdBy: existing?.createdBy || currentUser.id,
+    status,
+    context: String(form.get("context") || "").trim(),
+    meetingLink: String(form.get("meetingLink") || "").trim(),
+    notes: String(form.get("notes") || "").trim(),
+    createdAt: existing?.createdAt || nowIso(),
+    updatedAt: nowIso(),
+  };
+  if (existing) Object.assign(existing, meeting);
+  else state.meetings.unshift(meeting);
+  const oldStatus = selectedLead.crmStatus;
+  selectedLead.crmStatus = "meeting_scheduled";
+  selectedLead.nextAction = "Realizar reunião com gestores";
+  selectedLead.nextActionDate = meetingDateKey(meeting.startsAt);
+  selectedLead.timeline ||= [];
+  const action = existing && previousTime !== `${meetingDateLabel(meeting.startsAt)} ${meetingTimeLabel(meeting.startsAt)}` ? "meeting_rescheduled" : existing ? "meeting_updated" : "meeting_scheduled";
+  selectedLead.timeline.unshift(event(action, existing ? (action === "meeting_rescheduled" ? "Reunião reagendada" : "Reunião atualizada") : "Reunião comercial agendada", currentUser.id, { meetingId: meeting.id, startsAt: meeting.startsAt, endsAt: meeting.endsAt, managerIds }));
+  addAudit(action, "Meeting", meeting.id, { opportunityId, previousCrmStatus: oldStatus, managerIds });
+  notifyOpportunityTeam(selectedLead, `${existing ? "A reunião" : "Uma nova reunião"} de ${selectedLead.clientName} está marcada para ${meetingDateLabel(meeting.startsAt)} às ${meetingTimeLabel(meeting.startsAt)}.`, { title: existing ? "Reunião atualizada" : "Nova reunião agendada", kind: "meeting" });
+  saveState();
+  meetingFormContext = null;
+  toast(existing ? "Reunião atualizada." : "Reunião criada e lead atualizado.");
+  render();
 }
 
 function metrics() {
@@ -4618,6 +4800,39 @@ function bindAuth() {
 }
 
 function bindApp() {
+  document.querySelectorAll("[data-new-meeting]").forEach((button) => button.addEventListener("click", () => {
+    const start = new Date();
+    start.setMinutes(0, 0, 0);
+    meetingFormContext = { startsAt: start.toISOString(), endsAt: new Date(start.getTime() + 60 * 60000).toISOString() };
+    currentRoute = "meetings";
+    render();
+  }));
+  document.querySelectorAll("[data-meeting-slot]").forEach((button) => button.addEventListener("click", () => {
+    const start = new Date(button.dataset.meetingSlot);
+    meetingFormContext = { startsAt: start.toISOString(), endsAt: new Date(start.getTime() + 60 * 60000).toISOString() };
+    render();
+  }));
+  document.querySelectorAll("[data-open-meeting]").forEach((button) => button.addEventListener("click", () => {
+    meetingFormContext = { id: button.dataset.openMeeting };
+    render();
+  }));
+  document.querySelectorAll("[data-close-meeting-form]").forEach((button) => button.addEventListener("click", () => {
+    meetingFormContext = null;
+    render();
+  }));
+  document.querySelectorAll("[data-meetings-view]").forEach((button) => button.addEventListener("click", () => {
+    meetingsView = button.dataset.meetingsView;
+    render();
+  }));
+  document.querySelectorAll("[data-meetings-nav]").forEach((button) => button.addEventListener("click", () => {
+    const amount = Number(button.dataset.meetingsNav);
+    meetingsCursor = new Date(meetingsCursor);
+    if (meetingsView === "month") meetingsCursor.setMonth(meetingsCursor.getMonth() + amount);
+    else meetingsCursor.setDate(meetingsCursor.getDate() + amount * (meetingsView === "week" ? 7 : 1));
+    render();
+  }));
+  document.querySelector("[data-meetings-today]")?.addEventListener("click", () => { meetingsCursor = new Date(); render(); });
+
   document.querySelectorAll("[data-route]").forEach((button) => {
     button.addEventListener("click", () => {
       currentRoute = button.dataset.route;
@@ -4864,6 +5079,22 @@ function bindForms() {
       setFormBusy(formElement, false);
     }
   });
+
+  document.querySelector("[data-meeting-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveMeetingFromForm(event.currentTarget);
+  });
+  const meetingForm = document.querySelector("[data-meeting-form]");
+  if (meetingForm) {
+    const updateAvailability = () => {
+      const target = meetingForm.querySelector("[data-meeting-availability]");
+      if (target) target.innerHTML = meetingAvailabilitySummary(meetingForm);
+      refreshIcons();
+    };
+    meetingForm.addEventListener("change", updateAvailability);
+    meetingForm.addEventListener("input", updateAvailability);
+    updateAvailability();
+  }
 
   document.querySelector("[data-opportunity-edit-form]")?.addEventListener("submit", async (event) => {
     event.preventDefault();
