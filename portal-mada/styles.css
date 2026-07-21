@@ -5342,3 +5342,127 @@ button.progress-condition {
     box-shadow: 0 20px 70px rgba(19, 24, 42, 0.25);
   }
 }
+
+/* Mada visual language: neutral base with lime and dusty rose accents. */
+:root {
+  --black-primary: #1C1C1C;
+  --black-pure: #000000;
+  --gray-dark: #43403E;
+  --gray-mid: #A7A7A2;
+  --gray-border: #D9D9D9;
+  --gray-calendar: #EEEEEE;
+  --gray-light: #F4F4F4;
+  --off-white: #FAFAFA;
+  --white: #FFFFFF;
+  --lime: #E0F773;
+  --lime-soft: #E8F5AF;
+  --dusty-rose: #A77888;
+  --rose-light: #F7CDDB;
+  --bg: var(--off-white);
+  --surface: var(--white);
+  --surface-soft: var(--gray-light);
+  --line: var(--gray-border);
+  --line-strong: var(--gray-mid);
+  --text: var(--black-primary);
+  --muted: var(--gray-dark);
+  --muted-2: var(--gray-mid);
+  --brand: var(--lime);
+  --brand-strong: var(--black-primary);
+  --brand-soft: var(--lime-soft);
+  --sidebar-bg: var(--black-pure);
+  --sidebar-panel: var(--black-primary);
+  --sidebar-line: #2E2E2E;
+  --sidebar-text: var(--white);
+  --sidebar-muted: #C7C7C2;
+  --butter: var(--lime-soft);
+  --rose: var(--rose-light);
+  --blue: var(--gray-calendar);
+  --green: var(--lime);
+  --red: var(--dusty-rose);
+  --orange: var(--dusty-rose);
+  --ink: var(--black-primary);
+  --shadow: 0 12px 28px rgba(28, 28, 28, 0.08);
+  --shadow-lg: 0 24px 70px rgba(0, 0, 0, 0.2);
+}
+
+body { background: var(--bg); color: var(--text); }
+
+.button,
+button.button,
+.primary-action,
+.progress-save,
+.progress-condition.review {
+  color: var(--black-primary);
+}
+
+.button:hover,
+button.button:hover,
+.primary-action:hover,
+.progress-save:hover {
+  background: var(--lime-soft);
+}
+
+.progress-stage-pill.stage-manager_meeting,
+.progress-stage-pill.stage-proposal_sent_crm,
+.progress-stage-pill.stage-negotiating {
+  color: var(--black-primary);
+  background: var(--lime-soft);
+}
+
+.progress-stage-pill.stage-manager_meeting::before,
+.progress-stage-pill.stage-proposal_sent_crm::before,
+.progress-stage-pill.stage-negotiating::before,
+.progress-stage-track i.is-active {
+  background: var(--lime);
+}
+
+.progress-calendar-days button:hover,
+.progress-calendar-days button.is-today {
+  border-color: var(--dusty-rose);
+}
+
+.progress-calendar-days button.is-selected,
+.progress-condition.review {
+  color: var(--black-primary);
+  background: var(--lime);
+  border-color: var(--lime);
+}
+
+.progress-notes-cell input:focus {
+  border-color: var(--dusty-rose);
+  box-shadow: 0 0 0 2px rgba(167, 120, 136, 0.18);
+}
+
+.progress-condition.draft {
+  color: var(--dusty-rose);
+  border-color: var(--rose-light);
+  background: var(--rose-light);
+}
+
+.meeting-day.is-empty,
+.meeting-time-slot:hover { background: var(--gray-calendar); }
+
+.meeting-event,
+.meeting-day-number:hover,
+.meeting-manager-option:has(input:checked),
+.segmented-control button.is-active {
+  background: var(--lime-soft);
+}
+
+.meeting-event { border-left-color: var(--lime); }
+
+.meeting-status-confirmed {
+  border-left-color: var(--lime);
+  background: var(--lime-soft);
+}
+
+.meeting-status-cancelled,
+.meeting-status-no_show {
+  border-left-color: var(--dusty-rose);
+  background: var(--rose-light);
+}
+
+.meeting-availability-item.is-busy {
+  background: var(--rose-light);
+  color: var(--dusty-rose);
+}
