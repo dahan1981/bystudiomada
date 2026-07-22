@@ -6,7 +6,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import (
     BaseDocTemplate, Frame, PageTemplate, Paragraph, Spacer, Table, TableStyle,
-    PageBreak, KeepTogether, Image
+    PageBreak, KeepTogether
 )
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -14,7 +14,6 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "output" / "pdf" / "manual-funcionarios-portal-mada.pdf"
-LOGO = ROOT / "Logos" / "completo preto e branco.jpeg"
 
 BLUE = colors.HexColor("#3157D5")
 BLUE_DARK = colors.HexColor("#1F3FA8")
@@ -104,12 +103,7 @@ def build():
     story = []
 
     # Cover
-    if LOGO.exists():
-        logo = Image(str(LOGO), width=62 * mm, height=18 * mm)
-        logo.hAlign = "LEFT"
-        story.extend([Spacer(1, 18 * mm), logo, Spacer(1, 22 * mm)])
-    else:
-        story.extend([Spacer(1, 28 * mm)])
+    story.extend([Spacer(1, 20 * mm), P("STUDIO MADA", "SmallMada"), Spacer(1, 12 * mm)])
     story.extend([
         P("Manual dos funcionários", "CoverTitle"),
         P("Portal Comercial Mada", "CoverSub"),
@@ -130,6 +124,7 @@ def build():
         "Confira o ambiente no menu lateral: Treinamento para testes e Operação para trabalho real.",
         "Use a foto do perfil para acessar Configurações, recuperação de senha e informações da conta.",
     ])
+    story += [P("O menu lateral organiza o trabalho por função. Leads concentra o relacionamento comercial; Calendário de Reuniões concentra a agenda; Contratos, Pagamentos, Comissões e Arquivos registram as etapas posteriores da venda. O sistema deve ser usado como fonte comum de informação, evitando controles paralelos que não ficam disponíveis para o restante da equipe.")]
     story.append(callout("Atenção", "Nunca compartilhe sua senha, sessão ou código do autenticador. Se perder o acesso, use a recuperação de senha ou peça ao gestor para reenviar o acesso.", RED))
     story += section("2. Rotina da SDR", "A SDR trabalha principalmente nos Leads, Calendário de Reuniões, Contratos, Projetos, Comissões e Arquivos atribuídos a ela.")
     story += numbered([
@@ -139,7 +134,7 @@ def build():
         "Quando os dados estiverem completos, use Pedir aprovação. A condição aparecerá para o gestor analisar.",
         "Responda pedidos de informação e acompanhe a decisão dentro do próprio Lead.",
     ])
-    story.append(PageBreak())
+    story += [P("Um Lead bem preenchido não é apenas um cadastro. Ele deve permitir que outra pessoa entenda quem é o cliente, o que ele vende, qual necessidade foi identificada, qual serviço está sendo considerado, qual foi o último contato e qual é o próximo passo. Atualize essas informações sempre que a conversa evoluir.")]
     story += section("3. Etapas do Lead", "Escolha a etapa que melhor representa o momento atual da conversa comercial.")
     stage_data = [[P("Etapa", "TableHead"), P("Quando usar", "TableHead")]] + [
         [P(stage, "TableCell"), P(description, "TableCell")] for stage, description in [
@@ -168,6 +163,7 @@ def build():
         "O sistema mostra disponibilidade dos gestores e bloqueia conflitos de agenda.",
         "Depois de salvar, atualize o status para Agendada, Confirmada, Realizada, Reagendada, Cancelada ou Lead não compareceu.",
     ])
+    story += [P("A reunião deve ser marcada com tempo suficiente para que os gestores se preparem. Se houver alteração de horário, edite a reunião existente em vez de criar outra. O histórico do Lead deve permanecer coerente com a agenda e com o retorno do cliente.")]
     story.append(callout("Boa prática", "Escreva no contexto o histórico da conversa, a necessidade do lead, os serviços de interesse e o objetivo da reunião. Isso evita que o gestor precise reconstruir o histórico."))
     story += section("5. Aprovação da condição", "A aprovação acontece dentro do Lead, na área de Ações.")
     story += numbered([
@@ -185,7 +181,7 @@ def build():
         "A aprovação cria o caminho para o Projeto, onde o gestor acompanha etapas, responsáveis, prazos e status.",
         "A SDR registra o envio da proposta, o retorno do cliente e as informações comerciais no Lead.",
     ])
-    story.append(PageBreak())
+    story += [P("A SDR deve manter o cliente informado pelos canais combinados, enquanto o Portal Mada funciona como registro interno da operação. O envio para a cliente ocorre pelos meios definidos pela equipe; o portal não substitui o contato comercial nem assina contratos automaticamente.")]
 
     # Finance and manager
     story += section("7. Pagamentos e comissões", "O Portal Mada não processa pagamentos. Todos os lançamentos financeiros são registros de pagamentos realizados fora da plataforma.")
@@ -207,6 +203,7 @@ def build():
         "Use Relatórios para conferir receita contratada, recebida, comissões e comprovantes.",
         "Use Configurações para convidar, desativar ou recuperar o acesso de uma SDR.",
     ])
+    story += [P("A visão global do gestor existe para facilitar a distribuição de trabalho e a conferência dos números. Ela não elimina a responsabilidade de manter cada Lead, contrato, pagamento e comissão com dados completos e atualizados.")]
     story += section("9. Regras de segurança e uso", "Estas regras protegem os dados comerciais e evitam retrabalho.")
     story += bullets([
         "Treinamento nunca deve receber dados reais de clientes.",
@@ -216,7 +213,6 @@ def build():
         "Revise o destinatário antes de anexar proposta, contrato ou comprovante.",
         "Se uma informação estiver incorreta, corrija no Lead e deixe o contexto registrado na timeline.",
     ])
-    story.append(PageBreak())
     story.append(callout("Em caso de problema", "Anote o Lead, contrato ou pagamento envolvido, faça uma captura de tela e informe o gestor. Não tente contornar permissões nem editar diretamente o banco de dados."))
     story += section("10. Checklist diário", "Antes de encerrar o dia, confira:")
     story += bullets([
