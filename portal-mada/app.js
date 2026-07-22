@@ -2026,6 +2026,53 @@ function metricCard(label, value, icon = "$", progress = null) {
   `;
 }
 
+function managerLeadPerformance() {
+  const activeLeads = state.opportunities.filter((item) => !isArchivedOpportunity(item));
+  const sdrs = state.users.filter((user) => user.role === "sdr" && user.active !== false);
+  const contactedStatuses = ["first_contact", "follow_up", "replied", "manager_meeting", "proposal_sent_crm", "negotiating", "awaiting_contract_payment", "sale_completed"];
+  const respondedStatuses = ["replied", "manager_meeting", "proposal_sent_crm", "negotiating", "awaiting_contract_payment", "sale_completed"];
+  const qualifiedStatuses = ["manager_meeting", "proposal_sent_crm", "negotiating", "awaiting_contract_payment", "sale_completed"];
+  const proposalStatuses = ["proposal_sent_crm", "negotiating", "awaiting_contract_payment", "sale_completed"];
+  const today = dateOnlyValue(new Date());
+  const contractValueFor = (leads) => state.contracts.filter((contract) => leads.some((lead) => lead.id === contract.opportunityId)).reduce((sum, contract) => sum + (contract.saleValidatedAt ? contract.amountCents : 0), 0);
+  const build = (sdrId) => {
+    const leads = activeLeads.filter((item) => item.sdrId === sdrId);
+    const contacted = leads.filter((item) => contactedStatuses.includes(item.crmStatus)).length;
+    const responded = leads.filter((item) => respondedStatuses.includes(item.crmStatus)).length;
+    const closed = leads.filter((item) => item.crmStatus === "sale_completed" || state.contracts.some((contract) => contract.opportunityId === item.id && contract.saleValidatedAt)).length;
+    return {
+      sdrId,
+      leads: leads.length,
+      contacted,
+      responded,
+      qualified: leads.filter((item) => qualifiedStatuses.includes(item.crmStatus)).length,
+      proposals: leads.filter((item) => proposalStatuses.includes(item.crmStatus)).length,
+      closed,
+      overdue: leads.filter((item) => item.nextActionDate && item.nextActionDate < today && !["lost", "sale_completed"].includes(item.crmStatus)).length,
+      closedValue: contractValueFor(leads),
+      responseRate: contacted ? responded / contacted * 100 : 0,
+      conversion: leads.length ? closed / leads.length * 100 : 0,
+    };
+  };
+  const rows = sdrs.map((user) => build(user.id));
+  const total = rows.reduce((acc, row) => Object.fromEntries(Object.entries(acc).map(([key, value]) => [key, key === "sdrId" ? "total" : typeof value === "number" ? value + (row[key] || 0) : value])), {
+    sdrId: "total", leads: 0, contacted: 0, responded: 0, qualified: 0, proposals: 0, closed: 0, overdue: 0, closedValue: 0, responseRate: 0, conversion: 0,
+  });
+  total.responseRate = total.contacted ? total.responded / total.contacted * 100 : 0;
+  total.conversion = total.leads ? total.closed / total.leads * 100 : 0;
+  return { rows, total };
+}
+
+function renderManagerLeadPerformance() {
+  if (currentUser.role !== "admin_manager") return "";
+  const performance = managerLeadPerformance();
+  const columns = [
+    ["Leads cadastrados", "leads"], ["Contatados", "contacted"], ["Responderam", "responded"], ["Qualificados", "qualified"], ["Propostas enviadas", "proposals"], ["Fechados", "closed"], ["Follow-ups vencidos", "overdue"], ["Valor fechado", "closedValue"], ["Taxa de resposta", "responseRate"], ["Conversão em venda", "conversion"],
+  ];
+  const cell = (row, key) => ["responseRate", "conversion"].includes(key) ? `${row[key].toFixed(1).replace(".", ",")}%` : key === "closedValue" ? brl(row[key]) : row[key];
+  return `<section class="card manager-performance-card"><div class="section-head"><div><h3>Desempenho por SDR</h3><p>Indicadores comerciais consolidados dos leads ativos.</p></div>${renderIcon("chart-no-axes-combined")}</div><div class="manager-performance-wrap"><table class="manager-performance-table"><thead><tr><th>Indicador</th>${performance.rows.map((row) => `<th>${esc(getActorName(row.sdrId))}</th>`).join("")}<th>Total</th></tr></thead><tbody>${columns.map(([label, key]) => `<tr class="${key === "closed" ? "is-closed" : key === "overdue" ? "is-overdue" : ""}"><th>${label}</th>${performance.rows.map((row) => `<td>${cell(row, key)}</td>`).join("")}<td>${cell(performance.total, key)}</td></tr>`).join("")}</tbody></table></div></section>`;
+}
+
 function renderDashboard() {
   const m = metrics();
   const pendingActions = state.opportunities.filter((item) =>
@@ -2078,6 +2125,7 @@ function renderDashboard() {
         <button class="button secondary compact-button" type="button" data-route="reports">Abrir relatórios ${renderIcon("arrow-up-right")}</button>
       </section>
     </div>
+    ${renderManagerLeadPerformance()}
     <div class="grid dashboard-lists">
       <section class="card">
         <div class="section-head"><div><h3>Ações pendentes</h3><p>O que precisa de atenção agora.</p></div></div>
