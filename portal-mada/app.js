@@ -1990,15 +1990,17 @@ function metrics() {
   const opps = visibleOpportunities();
   const contracts = state.contracts.filter((contract) => opps.some((opp) => opp.id === contract.opportunityId));
   const commissions = state.commissions.filter((item) => currentUser.role === "admin_manager" || item.sdrId === currentUser.id);
+  const visibleProjectIds = new Set(opps.map((opp) => opp.id));
+  const projects = state.projects.filter((project) => currentUser.role === "admin_manager" || project.sdrId === currentUser.id || visibleProjectIds.has(project.opportunityId));
   return {
     pendingApprovals: state.opportunities.filter((item) => item.status === "pending_approval").length,
     approved: opps.filter((item) => item.status === "commercial_condition_approved").length,
     validatedSales: contracts.filter((item) => item.saleValidatedAt).length,
-    activeProjects: state.projects.filter((item) => item.status === "active").length,
+    activeProjects: projects.filter((item) => item.status === "active").length,
     commissionAvailable: commissions.filter((item) => item.status === "available").reduce((sum, item) => sum + item.amountCents, 0),
     commissionPaid: commissions.filter((item) => item.status === "paid").reduce((sum, item) => sum + item.amountCents, 0),
     cycle: commissions.filter((item) => item.status === "available").length % 5,
-    revenue: state.contracts.reduce((sum, item) => sum + item.amountCents, 0),
+    revenue: contracts.reduce((sum, item) => sum + item.amountCents, 0),
     received: visiblePayments().filter((item) => item.status === "confirmed").reduce((sum, item) => sum + item.amountCents, 0),
   };
 }
@@ -2095,9 +2097,7 @@ function renderDashboard() {
       ${metricCard("Aguardando Aprovação", m.pendingApprovals, "◴")}
       ${metricCard("Condições Aprovadas", m.approved, "✓")}
       ${metricCard("Vendas Validadas", m.validatedSales, "▤")}
-      ${metricCard("Projetos Ativos", m.activeProjects, "▥")}
-      ${metricCard("Comissão Disponível", brl(m.commissionAvailable), "$")}
-      ${metricCard("Receita Recebida", brl(m.received), "$")}
+      ${currentUser.role === "sdr" ? `${metricCard("Projetos Ativos", m.activeProjects, "▥")}${metricCard("Comissão Disponível", brl(m.commissionAvailable), "$")}${metricCard("Receita Recebida", brl(m.received), "$")}` : ""}
     </div>
     <div class="dashboard-overview">
       <section class="card pipeline-card">
