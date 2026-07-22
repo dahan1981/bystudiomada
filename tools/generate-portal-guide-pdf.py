@@ -13,7 +13,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "output" / "pdf" / "manual-funcionarios-portal-mada.pdf"
+OUTPUT = ROOT / "output" / "pdf" / "manual-usuario-portal-mada.pdf"
 
 BLUE = colors.HexColor("#3157D5")
 BLUE_DARK = colors.HexColor("#1F3FA8")
@@ -85,14 +85,14 @@ def footer(canvas, doc):
     canvas.line(18 * mm, 14 * mm, width - 18 * mm, 14 * mm)
     canvas.setFont(FONT, 8)
     canvas.setFillColor(MUTED)
-    canvas.drawString(18 * mm, 8 * mm, "Portal Comercial Mada | Manual dos funcionários")
+    canvas.drawString(18 * mm, 8 * mm, "Portal Comercial Mada | Manual do usuário")
     canvas.drawRightString(width - 18 * mm, 8 * mm, f"{doc.page}")
     canvas.restoreState()
 
 
 class MadaDocTemplate(BaseDocTemplate):
     def __init__(self, filename):
-        super().__init__(filename, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=18 * mm, bottomMargin=21 * mm, title="Manual dos Funcionários - Portal Mada", author="Studio Mada")
+        super().__init__(filename, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=18 * mm, bottomMargin=21 * mm, title="Manual do usuário - Portal Mada", author="Studio Mada")
         frame = Frame(self.leftMargin, self.bottomMargin, self.width, self.height, id="normal")
         self.addPageTemplates([PageTemplate(id="mada", frames=frame, onPage=footer)])
 
@@ -105,7 +105,7 @@ def build():
     # Cover
     story.extend([Spacer(1, 20 * mm), P("STUDIO MADA", "SmallMada"), Spacer(1, 12 * mm)])
     story.extend([
-        P("Manual dos funcionários", "CoverTitle"),
+        P("Manual do usuário", "CoverTitle"),
         P("Portal Comercial Mada", "CoverSub"),
         callout("Para que serve este manual", "Este guia explica como trabalhar no Portal Mada no dia a dia, desde o cadastro de um lead até aprovação, contrato, pagamentos informativos, comissões e projetos."),
         Spacer(1, 16 * mm),
@@ -116,7 +116,7 @@ def build():
     ])
 
     # Common access
-    story += section("1. Acesso e navegação", "O Portal Mada é um ambiente interno. Cada funcionário recebe um convite no próprio e-mail e cria sua senha individual.")
+    story += section("1. Acesso e navegação", "O Portal Mada é um ambiente de uso restrito. Cada usuário recebe um convite no próprio e-mail e cria sua senha individual.")
     story += numbered([
         "Abra o convite recebido no e-mail e clique no botão para criar seu acesso.",
         "Defina uma senha exclusiva e, quando solicitado, retorne à tela de login.",
@@ -125,13 +125,13 @@ def build():
         "Use a foto do perfil para acessar Configurações, recuperação de senha e informações da conta.",
     ])
     story += [P("O menu lateral organiza o trabalho por função. Leads concentra o relacionamento comercial; Calendário de Reuniões concentra a agenda; Contratos, Pagamentos, Comissões e Arquivos registram as etapas posteriores da venda. O sistema deve ser usado como fonte comum de informação, evitando controles paralelos que não ficam disponíveis para o restante da equipe.")]
-    story.append(callout("Atenção", "Nunca compartilhe sua senha, sessão ou código do autenticador. Se perder o acesso, use a recuperação de senha ou peça ao gestor para reenviar o acesso.", RED))
-    story += section("2. Rotina da SDR", "A SDR trabalha principalmente nos Leads, Calendário de Reuniões, Contratos, Projetos, Comissões e Arquivos atribuídos a ela.")
+    story.append(callout("Atenção", "Nunca compartilhe sua senha, sessão ou código do autenticador. Se perder o acesso, use a recuperação de senha ou solicite o reenvio do acesso à gestão.", RED))
+    story += section("2. Atuação comercial", "A atuação comercial concentra-se principalmente nos Leads, Calendário de Reuniões, Contratos, Projetos, Comissões e Arquivos atribuídos à conta.")
     story += numbered([
         "Cadastre o lead com os dados básicos, origem, serviços de interesse, problema, necessidade, prazo e investimento.",
         "Salve como rascunho enquanto a conversa ainda estiver em qualificação.",
         "No próprio Lead, atualize a etapa do CRM, a próxima ação, a data e as observações. Tudo fica registrado na timeline.",
-        "Quando os dados estiverem completos, use Pedir aprovação. A condição aparecerá para o gestor analisar.",
+        "Quando os dados estiverem completos, use Pedir aprovação. A condição aparecerá para análise da gestão.",
         "Responda pedidos de informação e acompanhe a decisão dentro do próprio Lead.",
     ])
     story += [P("Um Lead bem preenchido não é apenas um cadastro. Ele deve permitir que outra pessoa entenda quem é o cliente, o que ele vende, qual necessidade foi identificada, qual serviço está sendo considerado, qual foi o último contato e qual é o próximo passo. Atualize essas informações sempre que a conversa evoluir.")]
@@ -142,11 +142,11 @@ def build():
             ("Primeiro contato", "A primeira abordagem foi realizada."),
             ("Em follow-up", "Há uma conversa aberta e uma próxima ação definida."),
             ("Respondeu", "O lead respondeu e demonstrou abertura para continuar."),
-            ("Reunião dos gestores com o cliente", "Reunião comercial foi marcada ou realizada."),
+            ("Reunião com a gestão e o cliente", "Reunião comercial foi marcada ou realizada."),
             ("Proposta enviada", "A proposta foi enviada ao cliente."),
             ("Em negociação", "Valor, escopo ou condição estão sendo negociados."),
             ("Aguardando contrato/pagamento", "O cliente está na etapa de formalização ou pagamento."),
-            ("Venda concluída", "A venda foi validada pelo gestor."),
+            ("Venda concluída", "A venda foi validada pela gestão."),
             ("Nutrição / Perdido", "Use quando o lead deve aguardar ou quando a oportunidade foi encerrada."),
         ]
     ]
@@ -155,55 +155,55 @@ def build():
     story += [t]
 
     # Calendar and approval
-    story += section("4. Calendário de Reuniões", "Use o calendário para marcar reuniões comerciais entre um lead e um ou mais gestores.")
+    story += section("4. Calendário de Reuniões", "Use o calendário para marcar reuniões comerciais entre um lead e uma ou mais pessoas da gestão.")
     story += bullets([
         "Clique no dia ou no horário desejado para abrir a criação rápida da reunião.",
-        "Informe marca, lead relacionado, início, término, gestores participantes, contexto e link da reunião.",
+        "Informe marca, lead relacionado, início, término, participantes da gestão, contexto e link da reunião.",
         "Ao escolher o início, o término é sugerido automaticamente uma hora depois; ele continua editável.",
-        "O sistema mostra disponibilidade dos gestores e bloqueia conflitos de agenda.",
+        "O sistema mostra a disponibilidade da gestão e bloqueia conflitos de agenda.",
         "Depois de salvar, atualize o status para Agendada, Confirmada, Realizada, Reagendada, Cancelada ou Lead não compareceu.",
     ])
-    story += [P("A reunião deve ser marcada com tempo suficiente para que os gestores se preparem. Se houver alteração de horário, edite a reunião existente em vez de criar outra. O histórico do Lead deve permanecer coerente com a agenda e com o retorno do cliente.")]
-    story.append(callout("Boa prática", "Escreva no contexto o histórico da conversa, a necessidade do lead, os serviços de interesse e o objetivo da reunião. Isso evita que o gestor precise reconstruir o histórico."))
+    story += [P("A reunião deve ser marcada com tempo suficiente para que a gestão se prepare. Se houver alteração de horário, edite a reunião existente em vez de criar outra. O histórico do Lead deve permanecer coerente com a agenda e com o retorno do cliente.")]
+    story.append(callout("Boa prática", "Escreva no contexto o histórico da conversa, a necessidade do lead, os serviços de interesse e o objetivo da reunião. Isso reduz retrabalho na preparação da reunião."))
     story += section("5. Aprovação da condição", "A aprovação acontece dentro do Lead, na área de Ações.")
     story += numbered([
-        "A SDR salva a condição completa e clica em Pedir aprovação.",
-        "O gestor revisa valor, desconto, serviços, escopo e forma de pagamento.",
-        "O gestor pode aprovar sem alteração, aprovar com alterações, solicitar informações ou recusar.",
-        "Se houver pedido de informação, a SDR responde no Lead e envia novamente para análise.",
+        "A pessoa responsável pelo relacionamento comercial salva a condição completa e clica em Pedir aprovação.",
+        "A gestão revisa valor, desconto, serviços, escopo e forma de pagamento.",
+        "A gestão pode aprovar sem alteração, aprovar com alterações, solicitar informações ou recusar.",
+        "Se houver pedido de informação, a pessoa responsável responde no Lead e envia novamente para análise.",
         "Uma condição recusada é arquivada e bloqueada para alteração.",
     ])
-    story += section("6. Proposta, contrato e projeto", "Depois da aprovação, o gestor conduz a formalização e o planejamento.")
+    story += section("6. Proposta, contrato e projeto", "Depois da aprovação, a gestão conduz a formalização e o planejamento.")
     story += bullets([
-        "O gestor define quanto será cobrado, a forma de pagamento e anexa a proposta em PDF.",
-        "O gestor informa o link do contrato. A SDR consegue consultar os documentos do Lead atribuído a ela.",
+        "A gestão define quanto será cobrado, a forma de pagamento e anexa a proposta em PDF.",
+        "A gestão informa o link do contrato. A pessoa responsável pelo relacionamento comercial consulta os documentos do Lead atribuído à conta.",
         "Após o aceite, o contrato e o pagamento inicial são registrados no portal.",
-        "A aprovação cria o caminho para o Projeto, onde o gestor acompanha etapas, responsáveis, prazos e status.",
-        "A SDR registra o envio da proposta, o retorno do cliente e as informações comerciais no Lead.",
+        "A aprovação cria o caminho para o Projeto, onde a gestão acompanha etapas, responsáveis, prazos e status.",
+        "A pessoa responsável pelo relacionamento comercial registra o envio da proposta, o retorno do cliente e as informações comerciais no Lead.",
     ])
-    story += [P("A SDR deve manter o cliente informado pelos canais combinados, enquanto o Portal Mada funciona como registro interno da operação. O envio para a cliente ocorre pelos meios definidos pela equipe; o portal não substitui o contato comercial nem assina contratos automaticamente.")]
+    story += [P("A pessoa responsável pelo relacionamento comercial deve manter o cliente informado pelos canais combinados, enquanto o Portal Mada funciona como registro interno da operação. O envio para a cliente ocorre pelos meios definidos entre as partes; o portal não substitui o contato comercial nem assina contratos automaticamente.")]
 
     # Finance and manager
     story += section("7. Pagamentos e comissões", "O Portal Mada não processa pagamentos. Todos os lançamentos financeiros são registros de pagamentos realizados fora da plataforma.")
     story += bullets([
-        "Gestor: registre cada pagamento recebido do cliente em Pagamentos, incluindo contrato, valor, data, forma e comprovante quando necessário.",
-        "Gestor: lance manualmente a comissão vinculada ao pagamento confirmado, escolhendo a SDR e a taxa de 5% ou 10%.",
-        "Em pagamento 50/50, a taxa da SDR é 5% do valor total do contrato, distribuída nos ciclos correspondentes.",
+        "Gestão: registre cada pagamento recebido do cliente em Pagamentos, incluindo contrato, valor, data, forma e comprovante quando necessário.",
+        "Gestão: lance manualmente a comissão vinculada ao pagamento confirmado, escolhendo a pessoa responsável e a taxa de 5% ou 10%.",
+        "Em pagamento 50/50, a comissão é de 5% do valor total do contrato, distribuída nos ciclos correspondentes.",
         "Em pagamento à vista, a taxa é 10% do valor total do contrato em um único lançamento.",
-        "SDR: consulte apenas suas comissões, ciclo de pagamento, total recebido, valores disponíveis e comprovantes.",
-        "Comprovantes pagos pelo gestor ficam em Arquivos e aparecem nos relatórios.",
+        "Usuário comercial: consulte apenas suas comissões, ciclo de pagamento, total recebido, valores disponíveis e comprovantes.",
+        "Comprovantes pagos pela gestão ficam em Arquivos e aparecem nos relatórios.",
     ])
-    story.append(callout("Importante", "Se o cliente pagar uma condição diferente da prevista, o gestor deve conferir receita contratada, valor efetivamente pago e comissão lançada. O sistema registra; a decisão final é do gestor.", RED))
-    story += section("8. Rotina do gestor", "O gestor possui visão global e conduz as decisões de operação.")
+    story.append(callout("Importante", "Se o cliente pagar uma condição diferente da prevista, a gestão deve conferir receita contratada, valor efetivamente pago e comissão lançada. O sistema registra; a decisão final é da gestão.", RED))
+    story += section("8. Administração da operação", "A gestão possui visão global e conduz as decisões da operação.")
     story += numbered([
-        "Acompanhe o Dashboard e a tabela de desempenho por SDR.",
+        "Acompanhe o Dashboard e a tabela de desempenho por pessoa responsável.",
         "Revise aprovações pendentes e responda dentro do Lead.",
         "Conclua planejamento de proposta, contrato e projeto.",
         "Registre pagamentos externos e lance comissões manualmente.",
         "Use Relatórios para conferir receita contratada, recebida, comissões e comprovantes.",
-        "Use Configurações para convidar, desativar ou recuperar o acesso de uma SDR.",
+        "Use Configurações para convidar, desativar ou recuperar o acesso de uma pessoa usuária.",
     ])
-    story += [P("A visão global do gestor existe para facilitar a distribuição de trabalho e a conferência dos números. Ela não elimina a responsabilidade de manter cada Lead, contrato, pagamento e comissão com dados completos e atualizados.")]
+    story += [P("A visão global da gestão existe para facilitar a distribuição de trabalho e a conferência dos números. Ela não elimina a responsabilidade de manter cada Lead, contrato, pagamento e comissão com dados completos e atualizados.")]
     story += section("9. Regras de segurança e uso", "Estas regras protegem os dados comerciais e evitam retrabalho.")
     story += bullets([
         "Treinamento nunca deve receber dados reais de clientes.",
@@ -213,14 +213,14 @@ def build():
         "Revise o destinatário antes de anexar proposta, contrato ou comprovante.",
         "Se uma informação estiver incorreta, corrija no Lead e deixe o contexto registrado na timeline.",
     ])
-    story.append(callout("Em caso de problema", "Anote o Lead, contrato ou pagamento envolvido, faça uma captura de tela e informe o gestor. Não tente contornar permissões nem editar diretamente o banco de dados."))
+    story.append(callout("Em caso de problema", "Anote o Lead, contrato ou pagamento envolvido, faça uma captura de tela e informe a gestão. Não tente contornar permissões nem editar diretamente o banco de dados."))
     story += section("10. Checklist diário", "Antes de encerrar o dia, confira:")
     story += bullets([
         "Todos os Leads trabalhados têm etapa atualizada.",
         "Cada Lead ativo tem próxima ação e data quando necessário.",
         "Reuniões do dia estão com status atualizado.",
         "Pedidos de aprovação ou informação foram respondidos.",
-        "Pagamentos, comissões e comprovantes foram encaminhados ao gestor quando aplicável.",
+        "Pagamentos, comissões e comprovantes foram encaminhados à gestão quando aplicável.",
     ])
     story.extend([Spacer(1, 10 * mm), P("Versão do manual: 22 de julho de 2026", "SmallMada")])
     doc.build(story)
